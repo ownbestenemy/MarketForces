@@ -69,6 +69,7 @@ game with `/dump select(4, GetBuildInfo())` and update `## Interface:` in
 | `/mf autofill` | Toggle Razzle filling in sell prices with market value |
 | `/mf price <item>` | Market value and cheapest current listing (shift-click an item, or give its ID) |
 | `/mf tooltip` | Turn prices on item tooltips on or off |
+| `/mf advice` | Turn Razzle's buy / auction / vendor advice on tooltips on or off |
 | `/mf razzle` | Open or close Razzle's window anywhere |
 | `/mf dock` | Toggle Razzle opening beside the auction house |
 | `/mf status` | When this auction house was last scanned, and when the next scan is allowed |

@@ -37,6 +37,12 @@ the nearest silver, one frame after Blizzard sets its default. It never calls
 a posting function: the Post click is always the player's. `/mf autofill`
 turns the fill-in off and leaves Razzle's advice.
 
+Tooltip also adds a "Razzle says" line: **Buy it** when the cheapest
+listing is under the vendor price or at least 30% under market value,
+**Vendor it** when the auction house wouldn't pay more than a vendor after its
+5% cut (or there are no auction prices yet), otherwise **Auction it** with
+the expected take after the cut. `/mf advice` hides it.
+
 Modules never call each other directly. They send and listen for messages
 (`self:SendMessage("MF_SCAN_COMPLETE", results)`), so any one can be turned
 off with `/mf disable <name>` without breaking the others.
