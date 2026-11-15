@@ -1,0 +1,23 @@
+## Interface: 16001
+## Title: MarketForces
+## Notes: Auction house scanning, price history, tooltips and posting for WoW: Forever.
+## Author: ownbestenemy
+## Version: 0.1.0
+## SavedVariables: MarketForcesDB
+## SavedVariablesPerCharacter: MarketForcesCharDB
+
+# Core: load order matters. Init must come first and Core last.
+Core\Init.lua
+Core\Util.lua
+Core\Events.lua
+Core\Database.lua
+Core\Modules.lua
+Core\Slash.lua
+
+# Feature modules go here, one file (or folder) each, e.g.
+# Modules\Scan.lua
+# Modules\Prices.lua
+# Modules\Tooltip.lua
+# Modules\Post.lua
+
+Core\Core.lua
