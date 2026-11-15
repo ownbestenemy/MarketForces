@@ -4,9 +4,10 @@ An auction house addon for WoW: Forever, in the spirit of the classic AH
 addons: scan the auction house, keep price history,
 show prices on tooltips and help you post.
 
-**Status:** core framework only. The addon loads, saves data and has a `/mf`
-command, but the features (scanning, price history, tooltips, posting) are not
-built yet. Each one will arrive as its own module.
+**Status:** the core framework and the Scan module are built: open the
+auction house and click **Full Scan** (or type `/mf scan`) to read every
+auction. Price history, tooltips, posting and Razzle's window are next, each
+as its own module.
 
 ## Design: Razzle's Dazzles
 
@@ -60,6 +61,8 @@ game with `/dump select(4, GetBuildInfo())` and update `## Interface:` in
 | --- | --- |
 | `/mf` or `/mf help` | List commands |
 | `/mf version` | Show the addon version |
+| `/mf scan` | Full scan of the open auction house (same as the Full Scan button) |
+| `/mf status` | When this auction house was last scanned, and when the next scan is allowed |
 | `/mf modules` | List modules and whether each is on |
 | `/mf enable <module>` / `/mf disable <module>` | Turn a module on or off (saved) |
 | `/mf debug` | Toggle debug messages |
@@ -78,7 +81,8 @@ Core/
   Slash.lua        /mf command and subcommand registry
   Core.lua         startup (loaded last)
 Modules/           feature modules (see Modules/README.md)
-tests/run.lua      offline smoke test with a fake WoW API
+  Scan.lua         full auction house scan, one per click
+tests/             offline tests against a fake WoW API (run.lua runs them all)
 ```
 
 Saved data is split three ways: account-wide settings, per-character settings,
@@ -96,7 +100,7 @@ listings, rather than the old `QueryAuctionItems` API.
 
 ```
 luacheck .              # lint
-lua5.1 tests/run.lua    # smoke test
+lua5.1 tests/run.lua    # tests
 ```
 
 Both run in CI on every pull request.

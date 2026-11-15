@@ -16,14 +16,22 @@ globals = {
 
 -- WoW API the addon reads. Add to this as modules use more of the API.
 read_globals = {
+    "AuctionHouseFrame",
     "C_AddOns",
+    "C_AuctionHouse",
+    "C_Timer",
     "CreateFrame",
     "DEFAULT_CHAT_FRAME",
     "GetAddOnMetadata",
     "GetRealmName",
+    "UnitExists",
     "UnitFactionGroup",
+    "time",
 }
 
 files["tests/"] = {
-    globals = { "DEFAULT_CHAT_FRAME", "CreateFrame", "GetRealmName", "UnitFactionGroup", "GetAddOnMetadata" },
+    globals = {
+        "AuctionHouseFrame", "C_AuctionHouse", "C_Timer", "CreateFrame", "DEFAULT_CHAT_FRAME",
+        "GetAddOnMetadata", "GetRealmName", "MarketForcesScanButton", "UnitExists", "UnitFactionGroup", "time",
+    },
 }

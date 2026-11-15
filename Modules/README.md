@@ -1,15 +1,21 @@
 # Modules
 
 Every feature is a module in this folder, added to `MarketForces.toc` between
-the Core files and `Core\Core.lua`. Planned modules:
+the Core files and `Core\Core.lua`.
 
-| Module | Job |
-| --- | --- |
-| Scan | Query the auction house through `C_AuctionHouse` (items and commodities) and send `MF_SCAN_COMPLETE` with the results |
-| Prices | Listen for scans and keep per item price history in `db.ah` |
-| Tooltip | Show stored prices on item tooltips |
-| Post | Suggest prices; post or cancel only when the player clicks |
-| Broker | Razzle, the goblin broker of Razzle's Dazzles: the window, greetings and advice, built on the modules above |
+| Module | Status | Job |
+| --- | --- | --- |
+| Scan | Built | Query the auction house through `C_AuctionHouse` (items and commodities) and send `MF_SCAN_COMPLETE` with the results |
+| Prices | Next | Listen for scans and keep per item price history in `db.ah` |
+| Tooltip | Planned | Show stored prices on item tooltips |
+| Post | Planned | Suggest prices; post or cancel only when the player clicks |
+| Broker | Planned | Razzle, the goblin broker of Razzle's Dazzles: the window, greetings and advice, built on the modules above |
+
+Scan uses `C_AuctionHouse.ReplicateItems()`, the client's full "get all"
+query, which the server allows about once every 15 minutes. Each scan is
+started by a click, and results are read a few thousand per frame so the game
+doesn't stall. Items are grouped by item ID; random-suffix variants share one
+entry for now.
 
 Modules never call each other directly. They send and listen for messages
 (`self:SendMessage("MF_SCAN_COMPLETE", results)`), so any one can be turned
