@@ -28,6 +28,7 @@ local function scanWith(auctions)
 end
 
 local DAY = 24 * 60 * 60
+local function dayNumber(t) return math.floor(t / DAY) end
 H.now = 1800000000 - (1800000000 % DAY) + 12 * 3600 -- noon, so +/- hours stay in one day
 
 -- Day 1: linen 100c.
@@ -36,24 +37,25 @@ local p = Prices:GetPrice(2589)
 check(p and p.market == 100 and p.minBuyout == 100 and p.quantity == 10 and p.days == 1, "first scan recorded")
 check(Prices:GetPrice(9999) == nil, "unseen item has no price")
 
--- Same day, second scan at 200c: the day averages to 150.
+-- Same day, second scan at 200c: the day keeps its lowest value, 100.
 H.advance(15 * 60)
 scanWith({ { itemID = 2589, count = 10, buyout = 2000 } })
 p = Prices:GetPrice(2589)
-check(p.market == 150 and p.minBuyout == 200 and p.days == 1, "scans on one day are averaged")
+check(p.market == 100 and p.minBuyout == 200 and p.days == 1, "a day keeps its lowest scan value")
 
--- Seven days later at 300c: recent day counts twice as much as the old one.
--- (150 * 0.5 + 300 * 1) / 1.5 = 250
+-- Seven days later at 300c: the old day's recency weight halves to 0.5, but
+-- the new day sits 3x above the cheapest, so its weight is (1/3)^2.
+-- (100 * 0.5 + 300 / 9) / (0.5 + 1 / 9) = 136
 H.advance(7 * DAY)
 scanWith({ { itemID = 2589, count = 4, buyout = 1200 } })
 p = Prices:GetPrice(2589)
-check(p.days == 2 and p.market == 250, "market value weights recent days more")
+check(p.days == 2 and p.market == 136, "market value leans on recent and cheap days")
 
 -- Linen missing from the next scan: sold out now, but history keeps its value.
 H.advance(15 * 60)
 scanWith({ { itemID = 2770, count = 1, buyout = 500 } })
 p = Prices:GetPrice(2589)
-check(p.quantity == 0 and p.minBuyout == nil and p.market == 250, "sold-out item keeps market value")
+check(p.quantity == 0 and p.minBuyout == nil and p.market == 136, "sold-out item keeps market value")
 
 -- Bid-only items are tracked but get no value.
 H.advance(15 * 60)
@@ -66,7 +68,7 @@ H.advance(15 * 60)
 H.npcFaction = "Neutral"
 scanWith({ { itemID = 2589, count = 1, buyout = 999 } })
 check(Prices:GetPrice(2589).market == 999, "neutral AH has its own prices")
-check(Prices:GetPrice(2589, "US-RP PvP-Horde").market == 250, "faction AH prices untouched")
+check(Prices:GetPrice(2589, "US-RP PvP-Horde").market == 136, "faction AH prices untouched")
 H.npcFaction = nil
 H.openAuctionHouse()
 H.closeAuctionHouse()
@@ -74,7 +76,7 @@ H.closeAuctionHouse()
 -- /mf price
 H.clearChat()
 H.slash("price |cffffffff|Hitem:2589::::::::60:::::|h[Linen Cloth]|h|r")
-check(H.chatHas("Market value: 2s 50c") and H.chatHas("2 days of history"), "/mf price shows market value")
+check(H.chatHas("Market value: 1s 36c") and H.chatHas("2 days of history"), "/mf price shows market value")
 check(H.chatHas("Cheapest now: none listed, 0 listed"), "/mf price shows current listings")
 H.clearChat()
 H.slash("price 424242")
@@ -94,14 +96,39 @@ scanWith({ { itemID = 2770, count = 1, buyout = 500 } })
 check(Prices:GetPrice(2589) == nil, "item not seen for 30 days forgotten")
 check(Prices:GetPrice(2770) ~= nil, "recently seen item kept")
 
--- Same-day average keeps full precision: 1000 then 49 x 900 -> 902.
+-- A day keeps its lowest scan value: 1000 then 49 x 900 -> 900.
 H.advance(15 * 60)
 for i = 1, 50 do
     local unit = i == 1 and 1000 or 900
     Prices:RecordSnapshot({ key = MF.db.ahKey, time = H.now, auctions = 1,
         items = { [5000] = { quantity = 1, auctions = 1, minBuyout = unit, listings = { { unit, 1 } } } } })
 end
-check(Prices:GetPrice(5000).market == 902, "daily average not skewed by rounding")
+check(Prices:GetPrice(5000).market == 900, "day value is its lowest scan")
+-- Days saved before the lowest value was kept use their average, exactly.
+local legacy = Prices:ItemsFor()[5000].d
+for day in pairs(legacy) do legacy[day] = { 1000 + 49 * 900, 50 } end
+check(Prices:GetPrice(5000).market == 902, "older saved days use their precise average")
+
+-- Mark's case: one 11s listing among ~8g asks. Days of ~8g values don't
+-- outweigh a day at 11s.
+local gloves = {}
+gloves[dayNumber(H.now) - 2] = { 79600, 1, 79600 }
+gloves[dayNumber(H.now) - 1] = { 80000, 1, 80000 }
+gloves[dayNumber(H.now)] = { 1123, 1, 1123 }
+local glovesValue = Prices.Blend(gloves, dayNumber(H.now), 7, 2)
+check(glovesValue >= 1123 and glovesValue < 1200, "a realistic low price beats high asks (about 11s)")
+check(Prices.Blend(gloves, dayNumber(H.now), 7, 0) > 50000, "with lowWeight 0 the high asks would win")
+-- Ordinary spread barely moves: 100 today, 120 yesterday.
+local spread = { [10] = { 100, 1, 100 }, [9] = { 120, 1, 120 } }
+local v = Prices.Blend(spread, 10, 7, 2)
+check(v > 100 and v < 110, "normal price spread blends gently")
+-- A same-day scan: 8g then 11s -> the day is worth 11s.
+H.advance(15 * 60)
+Prices:RecordSnapshot({ key = MF.db.ahKey, time = H.now, auctions = 1,
+    items = { [6000] = { quantity = 2, auctions = 2, minBuyout = 79600, listings = { { 79600, 2 } } } } })
+Prices:RecordSnapshot({ key = MF.db.ahKey, time = H.now, auctions = 1,
+    items = { [6000] = { quantity = 3, auctions = 1, minBuyout = 1123, listings = { { 1123, 3 } } } } })
+check(Prices:GetPrice(6000).market == 1123, "a cheap scan later in the day sets the day's value")
 
 -- Old data at another house expires even without visiting it.
 local neutral = Prices:ItemsFor("US-RP PvP-Neutral")
