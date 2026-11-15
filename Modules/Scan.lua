@@ -1,0 +1,265 @@
+-- MarketForces Scan module.
+--
+-- Takes a full snapshot of the open auction house with
+-- C_AuctionHouse.ReplicateItems(), the client's built-in "get all" query.
+-- One click (the Full Scan button or /mf scan) starts one scan; nothing ever
+-- starts a scan on its own. The server only allows a full scan every so
+-- often, so we track the cooldown and say how long is left.
+--
+-- When the snapshot is read, Scan sends:
+--   MF_SCAN_COMPLETE(snapshot)
+--     snapshot.key       auction house key, e.g. "US-RP PvP-Horde"
+--     snapshot.time      time() when the scan finished
+--     snapshot.auctions  number of auctions read
+--     snapshot.items     [itemID] = {
+--         minBuyout = lowest buyout per unit (nil if every listing is bid-only),
+--         quantity  = units listed,
+--         auctions  = number of listings,
+--         listings  = { {unitBuyout, count}, ... } for buyout listings,
+--     }
+-- The snapshot is not saved here; the Prices module turns it into history.
+local _, MF = ...
+
+local Util = MF.Util
+
+local Scan = MF:NewModule("Scan", {
+    global = {
+        cooldown = 15 * 60, -- seconds the server makes us wait between full scans
+        lastScan = 0,       -- time() of the last full scan request (account-wide)
+        perFrame = 2000,    -- auctions read per frame, so big scans don't freeze the game
+    },
+    ah = {
+        lastScan = 0,       -- time() of the last completed scan of this auction house
+        lastCount = 0,      -- auctions seen in it
+    },
+})
+MF.Scan = Scan
+
+local WAIT_TIMEOUT = 90 -- seconds to wait for the server before giving up
+
+Scan.state = "idle" -- "idle" | "waiting" | "reading"
+
+local function now()
+    return time()
+end
+
+-- Which auction house is open: the faction AH, or "Neutral" for goblins.
+local function currentHouse()
+    if UnitExists and UnitExists("npc") then
+        local npcFaction = UnitFactionGroup("npc")
+        if npcFaction ~= "Alliance" and npcFaction ~= "Horde" then
+            return "Neutral"
+        end
+    end
+    return nil -- player's own faction
+end
+
+function Scan:IsAuctionHouseOpen()
+    return self.ahOpen == true
+end
+
+-- Seconds until a full scan is allowed again (0 when ready).
+function Scan:CooldownRemaining()
+    local remaining = (self.db.global.lastScan or 0) + self.db.global.cooldown - now()
+    return remaining > 0 and remaining or 0
+end
+
+local formatDuration = Util.FormatDuration
+
+-- Starts one full scan. Call this only from a click or a typed command.
+-- Returns true if a scan started, or false and a reason.
+function Scan:Start()
+    if not (C_AuctionHouse and C_AuctionHouse.ReplicateItems) then
+        return false, "This client doesn't offer full auction house scans."
+    end
+    if not self:IsAuctionHouseOpen() then
+        return false, "Open the auction house first."
+    end
+    if self.state ~= "idle" then
+        return false, "A scan is already running."
+    end
+    local wait = self:CooldownRemaining()
+    if wait > 0 then
+        return false, "The auction house won't take another full scan for " .. formatDuration(wait) .. "."
+    end
+
+    self.state = "waiting"
+    self.scanID = (self.scanID or 0) + 1
+    self.db.global.lastScan = now()
+    self:RegisterEvent("REPLICATE_ITEM_LIST_UPDATE")
+    C_AuctionHouse.ReplicateItems()
+    self:UpdateButton()
+    self:SendMessage("MF_SCAN_STARTED", MF.db.ahKey)
+
+    local id = self.scanID
+    C_Timer.After(WAIT_TIMEOUT, function()
+        if self.state == "waiting" and self.scanID == id then
+            self:Abort("The auction house didn't answer. Try again in a few minutes.")
+        end
+    end)
+    return true
+end
+
+function Scan:Abort(reason)
+    if self.state == "idle" then return end
+    self.state = "idle"
+    self.scanID = (self.scanID or 0) + 1 -- stops any reading still queued
+    self:UnregisterEvent("REPLICATE_ITEM_LIST_UPDATE")
+    self:UpdateButton()
+    if reason then self:Print(reason) end
+    self:SendMessage("MF_SCAN_ABORTED", reason)
+end
+
+function Scan:REPLICATE_ITEM_LIST_UPDATE()
+    if self.state ~= "waiting" then return end
+    self:UnregisterEvent("REPLICATE_ITEM_LIST_UPDATE")
+    self.state = "reading"
+    self:UpdateButton()
+
+    local total = C_AuctionHouse.GetNumReplicateItems()
+    local snapshot = { key = MF.db.ahKey, auctions = 0, items = {} }
+    local id = self.scanID
+    local index = 0 -- replicate indices start at 0
+
+    local function step()
+        if self.state ~= "reading" or self.scanID ~= id then return end
+        local last = math.min(index + self.db.global.perFrame, total) - 1
+        for i = index, last do
+            local _, _, count, _, _, _, _, _, _, buyout, _, _, _, _, _, _, itemID =
+                C_AuctionHouse.GetReplicateItemInfo(i)
+            if itemID then
+                count = (count and count > 0) and count or 1
+                local item = snapshot.items[itemID]
+                if not item then
+                    item = { quantity = 0, auctions = 0, listings = {} }
+                    snapshot.items[itemID] = item
+                end
+                item.quantity = item.quantity + count
+                item.auctions = item.auctions + 1
+                if buyout and buyout > 0 then
+                    local unit = math.floor(buyout / count)
+                    item.listings[#item.listings + 1] = { unit, count }
+                    if not item.minBuyout or unit < item.minBuyout then
+                        item.minBuyout = unit
+                    end
+                end
+                snapshot.auctions = snapshot.auctions + 1
+            end
+        end
+        index = last + 1
+        if index < total then
+            C_Timer.After(0, step)
+        else
+            self:Finish(snapshot)
+        end
+    end
+    step()
+end
+
+function Scan:Finish(snapshot)
+    self.state = "idle"
+    snapshot.time = now()
+    self.db.ah.lastScan = snapshot.time
+    self.db.ah.lastCount = snapshot.auctions
+    self.lastSnapshot = snapshot
+    self:UpdateButton()
+    local itemCount = 0
+    for _ in pairs(snapshot.items) do itemCount = itemCount + 1 end
+    self:Printf("Scan done: %d auctions of %d different items.", snapshot.auctions, itemCount)
+    self:SendMessage("MF_SCAN_COMPLETE", snapshot)
+end
+
+function Scan:Printf(fmt, ...)
+    self:Print(string.format(fmt, ...))
+end
+
+-- Auction house window ------------------------------------------------------
+
+function Scan:AUCTION_HOUSE_SHOW()
+    self.ahOpen = true
+    MF:InitAuctionHouseDB(currentHouse())
+    self:CreateButton()
+    self:UpdateButton()
+end
+
+function Scan:AUCTION_HOUSE_CLOSED()
+    self.ahOpen = false
+    if self.state ~= "idle" then
+        self:Abort("Scan stopped because the auction house closed.")
+    end
+end
+
+function Scan:CreateButton()
+    if self.button or not AuctionHouseFrame then return end
+    local button = CreateFrame("Button", "MarketForcesScanButton", AuctionHouseFrame, "UIPanelButtonTemplate")
+    button:SetSize(110, 22)
+    button:SetPoint("TOPRIGHT", AuctionHouseFrame, "TOPRIGHT", -30, -1)
+    button:SetText("Full Scan")
+    button:SetScript("OnClick", function()
+        local ok, reason = Scan:Start()
+        if not ok then Scan:Print(reason) end
+    end)
+    self.button = button
+end
+
+function Scan:UpdateButton()
+    local button = self.button
+    if not button then return end
+    if not self:IsEnabled() then
+        button:Hide()
+        return
+    end
+    button:Show()
+    if self.state == "waiting" then
+        button:SetText("Waiting...")
+        button:Disable()
+    elseif self.state == "reading" then
+        button:SetText("Reading...")
+        button:Disable()
+    else
+        button:SetText("Full Scan")
+        button:Enable()
+    end
+end
+
+-- Lifecycle -------------------------------------------------------------------
+
+function Scan:OnInitialize()
+    MF:RegisterSlashCommand("scan", "Full scan of the open auction house", function()
+        if not Scan:IsEnabled() then
+            Scan:Print("The Scan module is off. Turn it on with /mf enable scan.")
+            return
+        end
+        local ok, reason = Scan:Start()
+        if not ok then Scan:Print(reason) end
+    end)
+    MF:RegisterSlashCommand("status", "When this auction house was last scanned", function()
+        local ah = Scan.db.ah
+        if (ah.lastScan or 0) == 0 then
+            MF:Printf("%s has not been scanned yet.", MF.db.ahKey or "This auction house")
+        else
+            MF:Printf("%s: last scanned %s ago, %d auctions.", MF.db.ahKey,
+                formatDuration(now() - ah.lastScan), ah.lastCount or 0)
+        end
+        local wait = Scan:CooldownRemaining()
+        if wait > 0 then
+            MF:Print("Next full scan allowed in " .. formatDuration(wait) .. ".")
+        else
+            MF:Print("A full scan is allowed now.")
+        end
+    end)
+end
+
+function Scan:OnEnable()
+    self:RegisterEvent("AUCTION_HOUSE_SHOW")
+    self:RegisterEvent("AUCTION_HOUSE_CLOSED")
+    self:UpdateButton()
+end
+
+function Scan:OnDisable()
+    self:Abort()
+    self.enabled = false
+    self:UpdateButton()
+end
+
+Scan.CurrentHouse = currentHouse

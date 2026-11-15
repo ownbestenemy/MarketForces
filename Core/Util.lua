@@ -30,6 +30,15 @@ function Util.FormatMoney(copper)
     return sign .. table.concat(out, " ")
 end
 
+-- Turns seconds into "4m 05s" or "12s".
+function Util.FormatDuration(seconds)
+    seconds = math.max(0, floor(tonumber(seconds) or 0))
+    local m = floor(seconds / 60)
+    local s = seconds % 60
+    if m > 0 then return string.format("%dm %02ds", m, s) end
+    return string.format("%ds", s)
+end
+
 -- Copies keys from defaults into target where target has no value yet.
 -- Nested tables are merged recursively. Returns target.
 function Util.ApplyDefaults(target, defaults)

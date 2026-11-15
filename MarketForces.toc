@@ -14,8 +14,8 @@ Core\Database.lua
 Core\Modules.lua
 Core\Slash.lua
 
-# Feature modules go here, one file (or folder) each, e.g.
-# Modules\Scan.lua
+# Feature modules, one file (or folder) each.
+Modules\Scan.lua
 # Modules\Prices.lua
 # Modules\Tooltip.lua
 # Modules\Post.lua
