@@ -8,8 +8,8 @@ the Core files and `Core\Core.lua`.
 | Scan | Built | Query the auction house through `C_AuctionHouse` (items and commodities) and send `MF_SCAN_COMPLETE` with the results |
 | Prices | Built | Listen for scans and keep per item price history in `db.ah` |
 | Tooltip | Built | Show stored prices on item tooltips |
-| Post | Planned | Suggest prices; post or cancel only when the player clicks |
-| Broker | Next | Razzle, the goblin broker of Razzle's Dazzles: the window, greetings and advice, built on the modules above |
+| Post | Next | Suggest prices; post or cancel only when the player clicks |
+| Broker | Built | Razzle, the goblin broker of Razzle's Dazzles: the window, greetings and advice, built on the modules above |
 
 Scan uses `C_AuctionHouse.ReplicateItems()`, the client's full "get all"
 query, which the server allows about once every 15 minutes. Each scan is
@@ -23,6 +23,13 @@ per day, and blends the days with recent ones weighted more (a day's weight
 halves every 7 days). **Cheapest now** is the lowest buyout per unit in the
 latest scan. Other modules read both with `MF.Prices:GetPrice(itemID)`.
 History older than 30 days is pruned.
+
+Broker is Razzle's window. It docks beside the auction house window when
+that opens (turn off with `/mf dock`) and `/mf razzle` opens it anywhere,
+movable, with its position saved. Razzle greets you with how fresh the
+prices are, lists bargains (items whose cheapest listing is at or below 70%
+of market value, biggest discount first) and answers price checks typed or
+shift-clicked into its box. Razzle never buys, posts or cancels anything.
 
 Modules never call each other directly. They send and listen for messages
 (`self:SendMessage("MF_SCAN_COMPLETE", results)`), so any one can be turned

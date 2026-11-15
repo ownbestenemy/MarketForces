@@ -4,10 +4,11 @@ An auction house addon for WoW: Forever, in the spirit of the classic AH
 addons: scan the auction house, keep price history,
 show prices on tooltips and help you post.
 
-**Status:** the core framework, scanning, price history and tooltips are
-built: open the auction house, click **Full Scan** (or type `/mf scan`), then
-item tooltips (or `/mf price <item>`) show what it's worth. Razzle's window
-and posting are next, each as its own module.
+**Status:** scanning, price history, tooltips and Razzle's window are built.
+Open the auction house and Razzle's window docks beside it; click **Full
+Scan** (or type `/mf scan`) and Razzle points out bargains. Item tooltips,
+Razzle's price check box and `/mf razzle` (anywhere in the world) show what
+things are worth. Posting help is next.
 
 ## Design: Razzle's Dazzles
 
@@ -64,6 +65,8 @@ game with `/dump select(4, GetBuildInfo())` and update `## Interface:` in
 | `/mf scan` | Full scan of the open auction house (same as the Full Scan button) |
 | `/mf price <item>` | Market value and cheapest current listing (shift-click an item, or give its ID) |
 | `/mf tooltip` | Turn prices on item tooltips on or off |
+| `/mf razzle` | Open or close Razzle's window anywhere |
+| `/mf dock` | Toggle Razzle opening beside the auction house |
 | `/mf status` | When this auction house was last scanned, and when the next scan is allowed |
 | `/mf modules` | List modules and whether each is on |
 | `/mf enable <module>` / `/mf disable <module>` | Turn a module on or off (saved) |
@@ -86,6 +89,7 @@ Modules/           feature modules (see Modules/README.md)
   Scan.lua         full auction house scan, one per click
   Prices.lua       price history, market value, pruning
   Tooltip.lua      prices on item tooltips
+  Broker.lua       Razzle's window: greetings, bargains, price checks
 tests/             offline tests against a fake WoW API (run.lua runs them all)
 ```
 

@@ -20,24 +20,30 @@ read_globals = {
     "AuctionHouseFrame",
     "C_AddOns",
     "C_AuctionHouse",
+    "C_Item",
     "C_Timer",
+    "ChatEdit_InsertLink",
     "CreateFrame",
     "DEFAULT_CHAT_FRAME",
     "Enum",
     "GameTooltip",
     "GetAddOnMetadata",
+    "GetItemInfo",
     "ItemRefTooltip",
     "TooltipDataProcessor",
     "GetRealmName",
+    "UIParent",
+    "UISpecialFrames",
     "UnitExists",
     "UnitFactionGroup",
+    "hooksecurefunc",
     "time",
 }
 
 files["tests/"] = {
     globals = {
         "AuctionFrame", "AuctionHouseFrame", "C_AuctionHouse", "C_Timer", "CreateFrame", "DEFAULT_CHAT_FRAME", "Enum",
-        "TooltipDataProcessor",
+        "TooltipDataProcessor", "UIParent", "C_Item", "MarketForcesRazzleFrame",
         "GetAddOnMetadata", "GetRealmName", "MarketForcesScanButton", "UnitExists", "UnitFactionGroup", "time",
     },
 }
