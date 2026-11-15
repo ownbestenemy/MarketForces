@@ -11,8 +11,13 @@ local listener = {}
 function listener.MF_SCAN_COMPLETE(_, _, snapshot) snapshots[#snapshots + 1] = snapshot end
 MF:RegisterMessage("MF_SCAN_COMPLETE", listener)
 
+-- The window loads just after AUCTION_HOUSE_SHOW: the button still appears.
+H.windowLoadsLate = true
+
 -- Nothing happens until the player asks.
 H.openAuctionHouse()
+check(MarketForcesScanButton == nil, "no button before the window exists")
+H.advance(0.1)
 check(H.replicateCalls == 0, "opening the AH does not scan")
 check(MarketForcesScanButton and MarketForcesScanButton.text == "Full Scan", "Full Scan button added to the AH")
 

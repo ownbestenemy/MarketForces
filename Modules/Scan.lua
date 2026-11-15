@@ -56,9 +56,18 @@ end
 
 -- Trusts the window itself when it exists, so state stays right even if
 -- events were missed while the module was off.
+-- The Blizzard auction window: AuctionHouseFrame on the modern UI,
+-- AuctionFrame on the classic one. Both load on demand, so this can be nil
+-- until the auction house is first opened.
+local function auctionWindow()
+    return AuctionHouseFrame or AuctionFrame
+end
+Scan.AuctionWindow = auctionWindow
+
 function Scan:IsAuctionHouseOpen()
-    if AuctionHouseFrame and AuctionHouseFrame.IsShown then
-        return AuctionHouseFrame:IsShown() and true or false
+    local window = auctionWindow()
+    if window and window.IsShown then
+        return window:IsShown() and true or false
     end
     return self.ahOpen == true
 end
@@ -194,17 +203,36 @@ function Scan:AUCTION_HOUSE_CLOSED()
     end
 end
 
-function Scan:CreateButton()
-    if self.button or not AuctionHouseFrame then return end
-    local button = CreateFrame("Button", "MarketForcesScanButton", AuctionHouseFrame, "UIPanelButtonTemplate")
+-- The window's UI addon may finish loading just after AUCTION_HOUSE_SHOW, so
+-- if it isn't there yet we try again on the next few frames.
+function Scan:CreateButton(attempt)
+    if self.button then return end
+    local window = auctionWindow()
+    if not window then
+        attempt = (attempt or 0) + 1
+        if attempt <= 10 then
+            C_Timer.After(0.1, function()
+                if Scan.ahOpen then Scan:CreateButton(attempt) end
+            end)
+        else
+            self:Debug("no auction window found; use /mf scan")
+        end
+        return
+    end
+    local button = CreateFrame("Button", "MarketForcesScanButton", window, "UIPanelButtonTemplate")
     button:SetSize(110, 22)
-    button:SetPoint("TOPRIGHT", AuctionHouseFrame, "TOPRIGHT", -30, -1)
+    -- Just below the window's bottom-right corner, clear of its tabs and art.
+    button:SetPoint("TOPRIGHT", window, "BOTTOMRIGHT", -4, -2)
+    if button.SetFrameStrata and window.GetFrameStrata then button:SetFrameStrata(window:GetFrameStrata()) end
+    if button.SetFrameLevel and window.GetFrameLevel then button:SetFrameLevel(window:GetFrameLevel() + 10) end
     button:SetText("Full Scan")
     button:SetScript("OnClick", function()
         local ok, reason = Scan:Start()
         if not ok then Scan:Print(reason) end
     end)
     self.button = button
+    self:Debug("Full Scan button added to %s", window.GetName and window:GetName() or "auction window")
+    self:UpdateButton()
 end
 
 function Scan:UpdateButton()
