@@ -272,8 +272,14 @@ function Broker:RefreshDeals()
     if not f then return end
     local deals = self:FindDeals()
     local shown, loading = {}, 0
+    self.waitingFor = {}
     for _, deal in ipairs(deals) do
-        if deal.label then shown[#shown + 1] = deal else loading = loading + 1 end
+        if deal.label then
+            shown[#shown + 1] = deal
+        else
+            loading = loading + 1
+            self.waitingFor[deal.itemID] = true
+        end
     end
     for i, line in ipairs(f.dealLines) do
         local deal = shown[i]
@@ -362,8 +368,11 @@ function Broker:MF_POST_ITEM_SELECTED(_, itemID, suggestion, p)
 end
 
 -- An item the board was waiting on has loaded: refill the board once, a
--- moment later, since these arrive in bursts. Razzle's speech is left alone.
-function Broker:GET_ITEM_INFO_RECEIVED()
+-- moment later, since these arrive in bursts. Other items' events are
+-- ignored, since refilling walks the whole price history. Razzle's speech
+-- is left alone.
+function Broker:GET_ITEM_INFO_RECEIVED(_, itemID)
+    if not (self.waitingFor and itemID and self.waitingFor[itemID]) then return end
     if self.namesPending or not (self.frame and self.frame:IsShown()) then return end
     self.namesPending = true
     C_Timer.After(0.2, function()

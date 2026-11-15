@@ -73,6 +73,12 @@ check(H.plain(frame.dealLines[1].text) == "Linen Cloth  4s, worth 8s (10 listed)
 check(H.plain(frame.dealLines[2].text) == "Looking up 1 more...", "board says a row is loading")
 check(frame.speech.text:find("I found 2 bargains"), "greeting counts the loading row")
 local greeting = frame.speech.text
+local refills = 0
+local realRefresh = Broker.RefreshDeals
+Broker.RefreshDeals = function(...) refills = refills + 1 return realRefresh(...) end
+H.fire("GET_ITEM_INFO_RECEIVED", 2770, true)
+H.advance(1)
+check(refills == 0, "unrelated item loads don't refill the board")
 H.itemNames[9002] = "Lead Band"
 H.itemIcons = { [9002] = 133345 }
 H.fire("GET_ITEM_INFO_RECEIVED", 9002, true)
@@ -82,6 +88,11 @@ check(H.plain(frame.dealLines[1].text) == "Lead Band  10s, worth 70s (10 listed)
 check(frame.dealLines[1].text:find("|T133345:14:14|t", 1, true), "row shows the item icon")
 check(frame.dealRows[1].itemID == 9002, "row knows its item for the hover tooltip")
 check(frame.speech.text == greeting, "name loading leaves Razzle's speech alone")
+check(refills == 1, "one refill for a burst of loads")
+H.fire("GET_ITEM_INFO_RECEIVED", 9002, true)
+H.advance(1)
+check(refills == 1, "no refill once every board name is loaded")
+Broker.RefreshDeals = realRefresh
 
 -- Closing the AH closes the docked window.
 H.closeAuctionHouse()
