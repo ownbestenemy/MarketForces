@@ -18,7 +18,7 @@ local _, MF = ...
 
 local Util = MF.Util
 
-MF.SCHEMA_VERSION = 1
+MF.SCHEMA_VERSION = 2
 
 MF.defaults = {
     global = {
@@ -31,7 +31,21 @@ MF.defaults = {
 
 -- Ordered upgrade steps. MIGRATIONS[n] upgrades a schema n-1 DB to n.
 local MIGRATIONS = {
-    -- [2] = function(db) ... end,
+    -- 2: Prices daily entries change from { average, count } to { sum, count }.
+    [2] = function(db)
+        for _, house in pairs(db.auctionHouses or {}) do
+            local items = type(house.Prices) == "table" and house.Prices.items
+            if type(items) == "table" then
+                for _, entry in pairs(items) do
+                    for _, day in pairs(type(entry.d) == "table" and entry.d or {}) do
+                        if type(day[1]) == "number" and type(day[2]) == "number" then
+                            day[1] = day[1] * day[2]
+                        end
+                    end
+                end
+            end
+        end
+    end,
 }
 
 local function migrate(db)
