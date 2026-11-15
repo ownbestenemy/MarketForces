@@ -23,6 +23,11 @@
 --   d = { [dayNumber] = { sum of that day's scan values, number of scans,
 --                         lowest scan value that day } }
 --   (Entries saved before the third field existed use the day's average.)
+--   b = the latest scan's cheapest listings as a flat { unitPrice, units,
+--       unitPrice, units, ... } ladder, cheapest first, same prices merged:
+--       every price below market value (up to ladderSteps of them) plus the
+--       first one at or above it. bm = true when cheaper-than-market
+--       listings were left off the end. Flip advice reads these.
 local _, MF = ...
 
 local Util = MF.Util
@@ -33,6 +38,7 @@ local Prices = MF:NewModule("Prices", {
         halfLifeDays = 7,  -- a day's weight in market value halves this often
         cheapShare = 0.3,  -- share of the cheapest units a scan value averages
         lowWeight = 2,     -- how hard market value leans toward the cheapest days (0 = not at all)
+        ladderSteps = 12,  -- cheapest price steps kept from the latest scan
     },
     ah = {
         items = {},
@@ -101,6 +107,30 @@ local function blend(days, today, halfLife, lowWeight)
 end
 Prices.Blend = blend
 
+-- The cheapest listings as a flat ladder (see the header), or nil, more.
+function Prices.Ladder(listings, market, steps)
+    if not listings or #listings == 0 then return nil end
+    local sorted = {}
+    for i, listing in ipairs(listings) do sorted[i] = listing end
+    table.sort(sorted, function(a, b) return a[1] < b[1] end)
+    local flat, more = {}, nil
+    for _, listing in ipairs(sorted) do
+        local n = #flat
+        if n > 0 and flat[n - 1] == listing[1] then
+            flat[n] = flat[n] + listing[2]
+        else
+            -- The step before this one is already at or above market: done.
+            if n > 0 and (not market or flat[n - 1] >= market) then break end
+            if n / 2 >= steps then
+                more = true
+                break
+            end
+            flat[n + 1], flat[n + 2] = listing[1], listing[2]
+        end
+    end
+    return flat, more
+end
+
 -- Records a scan snapshot (from MF_SCAN_COMPLETE) into history.
 function Prices:RecordSnapshot(snapshot)
     local store = self:ItemsFor(snapshot.key)
@@ -128,12 +158,15 @@ function Prices:RecordSnapshot(snapshot)
             end
             recorded = recorded + 1
         end
+        local market = blend(entry.d, today, self.db.global.halfLifeDays, self.db.global.lowWeight)
+        entry.b, entry.bm = Prices.Ladder(item.listings, market, self.db.global.ladderSteps or 12)
     end
     -- Items listed before but missing from this scan are sold out.
     for itemID, entry in pairs(store) do
         if not snapshot.items[itemID] and entry.t and entry.t < snapshot.time then
             entry.q = 0
             entry.l = nil
+            entry.b, entry.bm = nil, nil
         end
     end
     self:Prune(snapshot.key, snapshot.time)
@@ -179,7 +212,9 @@ end
 
 -- Prices for an item at an auction house (current house if key is nil).
 -- Returns nil if the item has never been seen, otherwise a table:
---   market, minBuyout, quantity, lastSeen, days (days of history)
+--   market, minBuyout, quantity, lastSeen, days (days of history),
+--   ladder = { {unitPrice, units}, ... } cheapest listings of the latest
+--   scan (see the header; may be empty), ladderMore = listings left off
 function Prices:GetPrice(itemID, key)
     itemID = tonumber(itemID)
     if not itemID then return nil end
@@ -193,7 +228,13 @@ function Prices:GetPrice(itemID, key)
     end
     local days = 0
     for _ in pairs(entry.d) do days = days + 1 end
+    local ladder = {}
+    if entry.b then
+        for i = 1, #entry.b - 1, 2 do ladder[#ladder + 1] = { entry.b[i], entry.b[i + 1] } end
+    end
     return {
+        ladder = ladder,
+        ladderMore = entry.bm == true,
         market = blend(entry.d, dayNumber(time()), self.db.global.halfLifeDays, self.db.global.lowWeight),
         minBuyout = entry.l,
         quantity = entry.q or 0,
