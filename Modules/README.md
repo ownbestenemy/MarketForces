@@ -7,9 +7,9 @@ the Core files and `Core\Core.lua`.
 | --- | --- | --- |
 | Scan | Built | Query the auction house through `C_AuctionHouse` (items and commodities) and send `MF_SCAN_COMPLETE` with the results |
 | Prices | Built | Listen for scans and keep per item price history in `db.ah` |
-| Tooltip | Next | Show stored prices on item tooltips |
+| Tooltip | Built | Show stored prices on item tooltips |
 | Post | Planned | Suggest prices; post or cancel only when the player clicks |
-| Broker | Planned | Razzle, the goblin broker of Razzle's Dazzles: the window, greetings and advice, built on the modules above |
+| Broker | Next | Razzle, the goblin broker of Razzle's Dazzles: the window, greetings and advice, built on the modules above |
 
 Scan uses `C_AuctionHouse.ReplicateItems()`, the client's full "get all"
 query, which the server allows about once every 15 minutes. Each scan is
