@@ -29,6 +29,7 @@ read_globals = {
     "GameTooltip",
     "GetAddOnMetadata",
     "GetItemInfo",
+    "IsShiftKeyDown",
     "ItemRefTooltip",
     "TooltipDataProcessor",
     "GetRealmName",
@@ -43,7 +44,8 @@ read_globals = {
 files["tests/"] = {
     globals = {
         "AuctionFrame", "AuctionHouseFrame", "C_AuctionHouse", "C_Timer", "CreateFrame", "DEFAULT_CHAT_FRAME", "Enum",
-        "TooltipDataProcessor", "UIParent", "C_Item", "MarketForcesRazzleFrame",
+        "TooltipDataProcessor", "UIParent", "C_Item", "MarketForcesRazzleFrame", "hooksecurefunc",
+        "IsShiftKeyDown",
         "GetAddOnMetadata", "GetRealmName", "MarketForcesScanButton", "UnitExists", "UnitFactionGroup", "time",
     },
 }

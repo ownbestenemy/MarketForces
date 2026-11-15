@@ -2,8 +2,8 @@
 --
 -- Razzle's window docks beside the auction house when you open it, and
 -- /mf razzle opens it anywhere (movable, position saved). Razzle greets
--- you, says how fresh the prices are, lists bargains from the latest scan
--- and looks up prices. Razzle only talks: every buy, post and cancel stays
+-- you, says how fresh the prices are, lists bargains from the latest scan,
+-- talks about items you put up for sale and looks up prices. Razzle only talks: every buy, post and cancel stays
 -- with you and Blizzard's own buttons.
 --
 -- The logic (greetings, finding bargains, lookups) is kept apart from the
@@ -58,6 +58,23 @@ function Broker.Greeting(info)
     end
     return string.format("Back again? My numbers are %s old. %d %s on the board.",
         Util.FormatDuration(info.age), info.deals, info.deals == 1 and "bargain" or "bargains")
+end
+
+-- What Razzle says when you put an item in the sell slot.
+function Broker.PostLine(itemID, suggestion, p, filled)
+    local name = Broker.ItemName(itemID)
+    if not suggestion then
+        return "Selling " .. name .. "? I've got no steady price for it here yet. Price it by hand, "
+            .. "and a scan or two will teach me."
+    end
+    local line = string.format("Selling %s? Market value's %s each.", name, Util.FormatMoney(suggestion))
+    if p and p.minBuyout then
+        line = line .. " Cheapest listed right now is " .. Util.FormatMoney(p.minBuyout) .. "."
+    end
+    if filled then
+        line = line .. " I put my number in. Your call, boss: click Post when you're happy."
+    end
+    return line
 end
 
 -- Items listed well below market value at the current auction house,
@@ -280,6 +297,12 @@ function Broker:AUCTION_HOUSE_CLOSED()
     end
 end
 
+function Broker:MF_POST_ITEM_SELECTED(_, itemID, suggestion, p)
+    if not (self.frame and self.frame:IsShown()) then return end
+    local filled = suggestion and MF.Post and MF.Post.db.global.fillPrice
+    self.frame.speech:SetText(self.PostLine(itemID, suggestion, p, filled))
+end
+
 -- Faction and goblin auction houses keep separate prices: when the house
 -- switches (possibly after we docked), show the new house's numbers.
 function Broker:MF_AUCTION_HOUSE_CHANGED()
@@ -315,6 +338,7 @@ function Broker:OnEnable()
     self:RegisterEvent("AUCTION_HOUSE_CLOSED")
     self:RegisterMessage("MF_PRICES_UPDATED")
     self:RegisterMessage("MF_AUCTION_HOUSE_CHANGED")
+    self:RegisterMessage("MF_POST_ITEM_SELECTED")
 end
 
 function Broker:OnDisable()

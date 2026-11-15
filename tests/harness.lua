@@ -116,7 +116,24 @@ function CreateFrame(kind, name, parent)
 end
 
 UIParent = CreateFrame("Frame", "UIParent")
-C_Item = { GetItemInfo = function(itemID) return H.itemNames and H.itemNames[itemID] end }
+
+H.shiftDown = false
+function IsShiftKeyDown() return H.shiftDown end
+
+-- hooksecurefunc: runs the hook after the original, like the real one.
+function hooksecurefunc(target, method, hook)
+    if type(target) == "string" then target, method, hook = _G, target, method end
+    local original = target[method]
+    target[method] = function(...)
+        local result = original(...)
+        hook(...)
+        return result
+    end
+end
+C_Item = {
+    GetItemInfo = function(itemID) return H.itemNames and H.itemNames[itemID] end,
+    GetItemID = function(location) return location.itemID end,
+}
 H.itemNames = { [2589] = "Linen Cloth", [2770] = "Copper Ore" }
 
 function H.fire(event, ...)
@@ -159,15 +176,31 @@ C_AuctionHouse = {
 H.windowName = "AuctionHouseFrame"
 H.windowLoadsLate = false
 
+-- Modern sell frames: SetItem(location) then Blizzard sets a default price.
+local function addSellFrames(window)
+    for _, key in ipairs({ "ItemSellFrame", "CommoditiesSellFrame" }) do
+        local sell = CreateFrame("Frame", nil, window)
+        sell.PriceInput = { amount = 0, SetAmount = function(self, v) self.amount = v end }
+        function sell.SetItem(self, location)
+            self.item = location
+            self.PriceInput:SetAmount(H.blizzardDefaultPrice or 0)
+        end
+        window[key] = sell
+    end
+end
+
 function H.openAuctionHouse()
     local window = _G[H.windowName]
     if not window and not H.windowLoadsLate then
         window = CreateFrame("Frame", H.windowName)
+        if H.windowName == "AuctionHouseFrame" then addSellFrames(window) end
     end
     if window then window:Show() end
     H.fire("AUCTION_HOUSE_SHOW")
     if not window and H.windowLoadsLate then
-        CreateFrame("Frame", H.windowName):Show()
+        window = CreateFrame("Frame", H.windowName)
+        if H.windowName == "AuctionHouseFrame" then addSellFrames(window) end
+        window:Show()
     end
 end
 

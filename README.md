@@ -4,11 +4,13 @@ An auction house addon for WoW: Forever, in the spirit of the classic AH
 addons: scan the auction house, keep price history,
 show prices on tooltips and help you post.
 
-**Status:** scanning, price history, tooltips and Razzle's window are built.
+**Status:** scanning, price history, tooltips, Razzle's window and posting
+help are built.
 Open the auction house and Razzle's window docks beside it; click **Full
 Scan** (or type `/mf scan`) and Razzle points out bargains. Item tooltips,
 Razzle's price check box and `/mf razzle` (anywhere in the world) show what
-things are worth. Posting help is next.
+things are worth. Put an item in the sell slot and Razzle fills in its
+market value; you click Post.
 
 ## Design: Razzle's Dazzles
 
@@ -63,6 +65,8 @@ game with `/dump select(4, GetBuildInfo())` and update `## Interface:` in
 | `/mf` or `/mf help` | List commands |
 | `/mf version` | Show the addon version |
 | `/mf scan` | Full scan of the open auction house (same as the Full Scan button) |
+| `/mf scan force` | Try a scan before the 15 minute wait is up (same as shift-clicking Full Scan); once a minute at most |
+| `/mf autofill` | Toggle Razzle filling in sell prices with market value |
 | `/mf price <item>` | Market value and cheapest current listing (shift-click an item, or give its ID) |
 | `/mf tooltip` | Turn prices on item tooltips on or off |
 | `/mf razzle` | Open or close Razzle's window anywhere |
@@ -89,6 +93,7 @@ Modules/           feature modules (see Modules/README.md)
   Scan.lua         full auction house scan, one per click
   Prices.lua       price history, market value, pruning
   Tooltip.lua      prices on item tooltips
+  Post.lua         fills in sell prices with market value (you click Post)
   Broker.lua       Razzle's window: greetings, bargains, price checks
 tests/             offline tests against a fake WoW API (run.lua runs them all)
 ```
