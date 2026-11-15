@@ -66,6 +66,29 @@ check(H.replicateCalls == 1 and H.chatHas("won't take another full scan for 15m"
 H.clearChat()
 H.slash("status")
 check(H.chatHas("last scanned 0s ago, 4 auctions") and H.chatHas("Next full scan allowed in"), "/mf status")
+
+-- Forcing a scan skips the wait, but only once a minute.
+H.clearChat()
+H.slash("scan")
+check(H.chatHas("/mf scan force to try anyway"), "cooldown message mentions forcing")
+H.slash("scan force")
+check(H.replicateCalls == 2 and Scan.state == "waiting", "/mf scan force skips the cooldown")
+H.fire("REPLICATE_ITEM_LIST_UPDATE")
+H.runTimers()
+check(#snapshots == 2, "forced scan completes")
+H.clearChat()
+H.slash("scan force")
+check(H.replicateCalls == 2 and H.chatHas("force another scan in"), "forced scans limited to one a minute")
+H.advance(61)
+H.shiftDown = true
+MarketForcesScanButton:Click()
+H.shiftDown = false
+check(H.replicateCalls == 3, "shift-click forces a scan")
+H.clearChat()
+H.advance(91)
+check(H.chatHas("still on its own cooldown"), "forced scan the server ignores is explained")
+snapshots[2] = nil
+H.replicateCalls = 1
 H.advance(15 * 60)
 
 -- Big scans are read across frames.

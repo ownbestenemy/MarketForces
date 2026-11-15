@@ -27,6 +27,8 @@ local Scan = MF:NewModule("Scan", {
         cooldown = 15 * 60, -- seconds the server makes us wait between full scans
         lastScan = 0,       -- time() of the last full scan request (account-wide)
         perFrame = 2000,    -- auctions read per frame, so big scans don't freeze the game
+        forceGap = 60,      -- seconds between forced scans, so they can't be spammed
+        lastForce = 0,      -- time() of the last forced scan request
     },
     ah = {
         lastScan = 0,       -- time() of the last completed scan of this auction house
@@ -80,9 +82,17 @@ end
 
 local formatDuration = Util.FormatDuration
 
+-- Seconds until a forced scan is allowed again (0 when ready).
+function Scan:ForceGapRemaining()
+    local remaining = (self.db.global.lastForce or 0) + self.db.global.forceGap - now()
+    return remaining > 0 and remaining or 0
+end
+
 -- Starts one full scan. Call this only from a click or a typed command.
+-- force skips the 15 minute wait (the server may still say no), but forced
+-- scans are limited to one per forceGap seconds.
 -- Returns true if a scan started, or false and a reason.
-function Scan:Start()
+function Scan:Start(force)
     if not (C_AuctionHouse and C_AuctionHouse.ReplicateItems) then
         return false, "This client doesn't offer full auction house scans."
     end
@@ -92,11 +102,21 @@ function Scan:Start()
     if self.state ~= "idle" then
         return false, "A scan is already running."
     end
-    local wait = self:CooldownRemaining()
-    if wait > 0 then
-        return false, "The auction house won't take another full scan for " .. formatDuration(wait) .. "."
+    if force then
+        local gap = self:ForceGapRemaining()
+        if gap > 0 then
+            return false, "Easy, boss. You can force another scan in " .. formatDuration(gap) .. "."
+        end
+        self.db.global.lastForce = now()
+    else
+        local wait = self:CooldownRemaining()
+        if wait > 0 then
+            return false, "The auction house won't take another full scan for " .. formatDuration(wait)
+                .. ". Shift-click Full Scan or type /mf scan force to try anyway."
+        end
     end
 
+    self.forced = force and self:CooldownRemaining() > 0 or false
     self.state = "waiting"
     self.scanID = (self.scanID or 0) + 1
     self.db.global.lastScan = now()
@@ -108,7 +128,12 @@ function Scan:Start()
     local id = self.scanID
     C_Timer.After(WAIT_TIMEOUT, function()
         if self.state == "waiting" and self.scanID == id then
-            self:Abort("The auction house didn't answer. Try again in a few minutes.")
+            if self.forced then
+                self:Abort("The auction house didn't answer. It's probably still on its own cooldown; "
+                    .. "try again in a few minutes.")
+            else
+                self:Abort("The auction house didn't answer. Try again in a few minutes.")
+            end
         end
     end)
     return true
@@ -226,8 +251,9 @@ function Scan:CreateButton(attempt)
     if button.SetFrameStrata and window.GetFrameStrata then button:SetFrameStrata(window:GetFrameStrata()) end
     if button.SetFrameLevel and window.GetFrameLevel then button:SetFrameLevel(window:GetFrameLevel() + 10) end
     button:SetText("Full Scan")
+    -- Shift-click forces a scan past the 15 minute wait.
     button:SetScript("OnClick", function()
-        local ok, reason = Scan:Start()
+        local ok, reason = Scan:Start(IsShiftKeyDown and IsShiftKeyDown() or false)
         if not ok then Scan:Print(reason) end
     end)
     self.button = button
@@ -258,12 +284,14 @@ end
 -- Lifecycle -------------------------------------------------------------------
 
 function Scan:OnInitialize()
-    MF:RegisterSlashCommand("scan", "Full scan of the open auction house", function()
+    MF:RegisterSlashCommand("scan", "Full scan of the open auction house (/mf scan force skips the wait)",
+        function(args)
         if not Scan:IsEnabled() then
             Scan:Print("The Scan module is off. Turn it on with /mf enable scan.")
             return
         end
-        local ok, reason = Scan:Start()
+        local force = Util.SplitFirstWord(args):lower() == "force"
+        local ok, reason = Scan:Start(force)
         if not ok then Scan:Print(reason) end
     end)
     MF:RegisterSlashCommand("status", "When this auction house was last scanned", function()
