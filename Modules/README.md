@@ -63,6 +63,17 @@ the nearest silver, one frame after Blizzard sets its default. It never calls
 a posting function: the Post click is always the player's. `/mf autofill`
 turns the fill-in off and leaves Razzle's advice.
 
+Shift-clicking a bag item while the auction house is open puts it up for
+sale: Post finds it in the bags, calls Blizzard's `AuctionHouseFrame:SetPostItem`
+(the same as right-clicking it on the Sell tab), and on the next frame sets
+the quantity and duration. The quantity is everything you hold, capped at
+what other sellers list right now (at least one stack); the duration is 24
+hours unless changed with `/mf duration`, also saved to Blizzard's
+`auctionHouseDurationDropdown` default. It's skipped while a chat box, the
+AH search box or one of Razzle's boxes has focus, so shift-click still
+links items there. Razzle says what it set up; the player clicks Post.
+`/mf shiftsell` turns it off.
+
 Tooltip also adds a "Razzle says" line: **Buy it** when the cheapest
 listing is under the vendor price or at least 30% under market value,
 **Vendor it** when the auction house wouldn't pay more than a vendor after its

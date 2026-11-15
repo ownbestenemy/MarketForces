@@ -153,6 +153,14 @@ C_Container = {
     GetContainerItemInfo = function(bag, slot) return H.bags[bag] and H.bags[bag][slot] end,
 }
 
+ItemLocation = {
+    CreateFromBagAndSlot = function(_, bag, slot)
+        return { bag = bag, slot = slot, IsBagAndSlot = function() return true end }
+    end,
+}
+H.cvars = {}
+function SetCVar(name, value) H.cvars[name] = value end
+
 -- Blizzard's link paths for shift-clicks (they differ between clients).
 ChatFrameUtil = { InsertLink = function() return false end }
 function HandleModifiedItemClick() return false end
@@ -211,11 +219,27 @@ local function addSellFrames(window)
     for _, key in ipairs({ "ItemSellFrame", "CommoditiesSellFrame" }) do
         local sell = CreateFrame("Frame", nil, window)
         sell.PriceInput = { amount = 0, SetAmount = function(self, v) self.amount = v end }
+        sell.QuantityInput = { SetQuantity = function(self, v) self.quantity = v end }
+        sell.Duration = { SetDuration = function(self, v) self.duration = v end }
         function sell.SetItem(self, location)
             self.item = location
             self.PriceInput:SetAmount(H.blizzardDefaultPrice or 0)
         end
         window[key] = sell
+    end
+    -- Bag item -> sell slot (commodities to the commodity frame); the other
+    -- sell frame hides, like switching display modes.
+    function window:SetPostItem(location)
+        if H.setPostItemFails then error("no") end
+        if H.setPostItemDeclines then return end
+        local info = C_Container.GetContainerItemInfo(location.bag, location.slot)
+        local commodity = H.commodities and H.commodities[info.itemID]
+        local show = commodity and self.CommoditiesSellFrame or self.ItemSellFrame
+        local hide = commodity and self.ItemSellFrame or self.CommoditiesSellFrame
+        hide:Hide()
+        show:Show()
+        H.postItemSet = location
+        show:SetItem({ itemID = info.itemID, bag = location.bag, slot = location.slot })
     end
     -- Browse result -> buy view, and the search bar.
     H.selected = nil
