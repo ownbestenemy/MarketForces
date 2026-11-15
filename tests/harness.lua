@@ -25,9 +25,14 @@ SlashCmdList = {}
 
 function H.slash(text) SlashCmdList.MARKETFORCES(text) end
 
+-- Chat text with WoW color codes removed.
+function H.plain(text)
+    return (text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""))
+end
+
 function H.chatHas(pattern)
     for _, line in ipairs(H.chat) do
-        if line:find(pattern) then return true end
+        if H.plain(line):find(pattern) then return true end
     end
     return false
 end

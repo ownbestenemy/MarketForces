@@ -1,6 +1,6 @@
 -- Runs every test file in its own Lua process. From the repo root:
 --   lua5.1 tests/run.lua
-local tests = { "tests/core_test.lua", "tests/scan_test.lua" }
+local tests = { "tests/core_test.lua", "tests/scan_test.lua", "tests/prices_test.lua" }
 local lua = arg and arg[-1] or "lua5.1"
 local failed = 0
 for _, path in ipairs(tests) do

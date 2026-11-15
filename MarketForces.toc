@@ -16,7 +16,7 @@ Core\Slash.lua
 
 # Feature modules, one file (or folder) each.
 Modules\Scan.lua
-# Modules\Prices.lua
+Modules\Prices.lua
 # Modules\Tooltip.lua
 # Modules\Post.lua
 
