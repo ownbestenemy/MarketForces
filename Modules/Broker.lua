@@ -197,6 +197,37 @@ local function newItemRow(parent, hint)
     return row, line
 end
 
+-- Shift-clicking an item puts its link in whichever of Razzle's boxes has
+-- focus. Blizzard's link path differs between clients (ChatEdit_InsertLink,
+-- ChatFrameUtil.InsertLink, HandleModifiedItemClick), so all of them that
+-- exist are hooked, once.
+local linkBoxes = {}
+local function insertLink(link)
+    if type(link) ~= "string" then return end
+    for _, box in ipairs(linkBoxes) do
+        if box:HasFocus() then
+            box:SetText(link)
+            return
+        end
+    end
+end
+
+local linkHooked
+local function hookLinkInsert()
+    if linkHooked or not hooksecurefunc then return end
+    linkHooked = true
+    if ChatEdit_InsertLink then hooksecurefunc("ChatEdit_InsertLink", insertLink) end
+    if ChatFrameUtil and ChatFrameUtil.InsertLink then hooksecurefunc(ChatFrameUtil, "InsertLink", insertLink) end
+    if HandleModifiedItemClick then
+        hooksecurefunc("HandleModifiedItemClick", function(link)
+            if (IsModifiedClick and IsModifiedClick("CHATLINK")) or (IsShiftKeyDown and IsShiftKeyDown()) then
+                insertLink(link)
+            end
+        end)
+    end
+end
+Broker.InsertLink = insertLink
+
 -- An item box: Enter calls onEnter(text); shift-clicking an item while it
 -- has focus puts the item's link in it.
 local function newItemBox(parent, name, onEnter)
@@ -208,20 +239,18 @@ local function newItemBox(parent, name, onEnter)
         editBox:ClearFocus()
     end)
     box:SetScript("OnEscapePressed", function(editBox) editBox:ClearFocus() end)
-    if hooksecurefunc and ChatEdit_InsertLink then
-        hooksecurefunc("ChatEdit_InsertLink", function(link)
-            if link and box:HasFocus() then box:SetText(link) end
-        end)
-    end
+    linkBoxes[#linkBoxes + 1] = box
+    hookLinkInsert()
     return box
 end
 
 Broker.TABS = { "Bargains", "Flips" }
+Broker.FLIP_ROWS = 6
 
 function Broker:CreateWindow()
     if self.frame then return self.frame end
     local f = CreateFrame("Frame", "MarketForcesRazzleFrame", UIParent, "BasicFrameTemplateWithInset")
-    f:SetSize(320, 440)
+    f:SetSize(320, 480)
     f:SetFrameStrata("HIGH")
     f:SetClampedToScreen(true)
     f:EnableMouse(true)
@@ -299,7 +328,7 @@ function Broker:CreateWindow()
     local flips = f.pages.Flips
     local flipLabel = newText(flips, "GameFontNormal")
     flipLabel:SetPoint("TOPLEFT", flips, "TOPLEFT", 2, 0)
-    flipLabel:SetText("Flip check: type a name or shift-click an item")
+    flipLabel:SetText("Flip check: type a name, or pick from your bags")
 
     f.flipBox = newItemBox(flips, "MarketForcesRazzleFlip", function(text) Broker:CheckFlip(text) end)
     f.flipBox:SetPoint("TOPLEFT", flipLabel, "BOTTOMLEFT", 6, -4)
@@ -311,27 +340,46 @@ function Broker:CreateWindow()
     -- Opens the item in the buy view, like a bargain row. Never buys.
     f.flipShow = CreateFrame("Button", nil, flips, "UIPanelButtonTemplate")
     f.flipShow:SetSize(150, 22)
-    f.flipShow:SetPoint("TOPLEFT", flips, "TOPLEFT", 0, -136)
+    f.flipShow:SetPoint("TOPLEFT", flips, "TOPLEFT", 0, -150)
     f.flipShow:SetText("Show me at the AH")
     f.flipShow:SetScript("OnClick", function(button)
         if button.itemID then f.speech:SetText(Broker:ShowDeal(button.itemID, button.price)) end
     end)
     f.flipShow:Hide()
 
-    local picksHeader = newText(flips, "GameFontNormal")
-    picksHeader:SetPoint("TOPLEFT", flips, "TOPLEFT", 2, -166)
-    picksHeader:SetText("Razzle's best flips")
+    -- The list below: your bags (default) or Razzle's best flips. Clicking a
+    -- row gives Razzle's numbers and, at the auction house, searches for it.
+    f.listButtons = {}
+    for i, mode in ipairs({ { "bags", "Your bags" }, { "picks", "Best flips" } }) do
+        local button = CreateFrame("Button", nil, flips, "UIPanelButtonTemplate")
+        button:SetSize(90, 20)
+        if i == 1 then
+            button:SetPoint("TOPLEFT", flips, "TOPLEFT", 0, -180)
+        else
+            button:SetPoint("LEFT", f.listButtons.bags, "RIGHT", 4, 0)
+        end
+        button:SetText(mode[2])
+        button:SetScript("OnClick", function() Broker:ShowFlipList(mode[1]) end)
+        f.listButtons[mode[1]] = button
+    end
+    f.pageNext = CreateFrame("Button", nil, flips, "UIPanelButtonTemplate")
+    f.pageNext:SetSize(24, 20)
+    f.pageNext:SetPoint("TOPRIGHT", flips, "TOPRIGHT", 0, -180)
+    f.pageNext:SetText(">")
+    f.pageNext:SetScript("OnClick", function() Broker:TurnBagPage(1) end)
+    f.pagePrev = CreateFrame("Button", nil, flips, "UIPanelButtonTemplate")
+    f.pagePrev:SetSize(24, 20)
+    f.pagePrev:SetPoint("RIGHT", f.pageNext, "LEFT", -2, 0)
+    f.pagePrev:SetText("<")
+    f.pagePrev:SetScript("OnClick", function() Broker:TurnBagPage(-1) end)
 
     f.flipLines, f.flipRows = {}, {}
-    previous = picksHeader
-    for i = 1, MF.Flip and MF.Flip.db.global.maxPicks or 5 do
-        local row, line = newItemRow(flips, "Click for Razzle's numbers")
+    previous = f.listButtons.bags
+    for i = 1, Broker.FLIP_ROWS do
+        local row, line = newItemRow(flips, "Click for Razzle's numbers (and the AH, when it's open)")
         row:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, -3)
         row:SetScript("OnClick", function(button)
-            if button.itemID then
-                f.flipBox:SetText(Broker.ItemName(button.itemID))
-                Broker:CheckFlip(button.itemID)
-            end
+            if button.itemID then Broker:PickFlipItem(button.itemID) end
         end)
         f.flipLines[i], f.flipRows[i] = line, row
         previous = row
@@ -369,7 +417,9 @@ function Broker:CheckFlip(text)
         f.flipShow:Hide()
         return
     end
-    self.flipQuery = text
+    -- Remember the item, not the text, so a name still works at a house
+    -- that hasn't seen it.
+    self.flipQuery = flip.ResolveItem(text) or text
     local answer, plan = flip:Advise(text)
     f.flipAnswer:SetText(answer)
     f.flipShow.itemID = plan and plan.itemID
@@ -377,32 +427,110 @@ function Broker:CheckFlip(text)
     if plan then f.flipShow:Show() else f.flipShow:Hide() end
 end
 
--- Fills the best-flips list (names still loading wait, like the board).
+-- A row on the Flips tab was clicked: Razzle's numbers for the item, and
+-- at the auction house, the item in the buy view (or a search for it).
+-- That's all one click does; buying is still the player's own click.
+function Broker:PickFlipItem(itemID)
+    local f = self.frame
+    if not f then return end
+    f.flipBox:SetText(Broker.ItemName(itemID))
+    self:CheckFlip(itemID)
+    local scan = MF.Scan
+    if scan and scan:IsAuctionHouseOpen() then
+        local p = MF.Prices and MF.Prices:GetPrice(itemID)
+        f.speech:SetText(self:ShowDeal(itemID, p and p.minBuyout))
+    end
+end
+
+-- Which list the Flips tab shows: "bags" or "picks".
+function Broker:ShowFlipList(mode)
+    self.flipList = mode
+    self.bagPage = 1
+    self:RefreshFlips()
+end
+
+function Broker:TurnBagPage(delta)
+    self.bagPage = (self.bagPage or 1) + delta
+    self:RefreshFlips()
+end
+
+-- Your bag items for the Flips tab, priced ones first (most total value
+-- first), each with a label (nil while its name loads) and market value.
+function Broker:BagRows()
+    local flip, prices = MF.Flip, MF.Prices
+    local items = flip and flip.BagItems() or {}
+    for _, item in ipairs(items) do
+        local p = prices and prices:IsEnabled() and prices:GetPrice(item.itemID)
+        item.market = p and p.market
+        item.label = Broker.ItemLabel(item.itemID)
+    end
+    table.sort(items, function(a, b)
+        local va, vb = (a.market or -1) * a.count, (b.market or -1) * b.count
+        if va ~= vb then return va > vb end
+        return a.itemID < b.itemID
+    end)
+    return items
+end
+
+-- One bag row, e.g. "Linen Cloth x20, 1s 58c each".
+function Broker.BagLine(item)
+    local name = item.label or Broker.ItemName(item.itemID)
+    if not item.market then return string.format("%s x%d, no price yet", name, item.count) end
+    return string.format("%s x%d, %s each", name, item.count, Util.FormatMoney(item.market))
+end
+
+-- Fills the list on the Flips tab (names still loading wait, like the board).
 function Broker:RefreshFlips()
     local f = self.frame
     if not (f and f.flipLines) then return end
     local flip = MF.Flip
-    local picks = (flip and flip:IsEnabled()) and flip:FindFlips() or {}
+    local on = flip and flip:IsEnabled()
+    local mode = self.flipList or "bags"
+    f.listButtons.bags:Enable()
+    f.listButtons.picks:Enable()
+    f.listButtons[mode]:Disable()
+    local entries, empty = {}
+    if not on then
+        empty = "Flip advice is off."
+    elseif mode == "picks" then
+        entries, empty = flip:FindFlips(), "No flips worth the bother right now."
+    else
+        entries, empty = self:BagRows(), "Nothing in your bags I can sell."
+    end
     local shown, loading = {}, 0
     self.flipsWaitingFor = {}
-    for _, plan in ipairs(picks) do
-        if plan.label then
-            shown[#shown + 1] = plan
+    for _, entry in ipairs(entries) do
+        if entry.label then
+            shown[#shown + 1] = entry
         else
             loading = loading + 1
-            self.flipsWaitingFor[plan.itemID] = true
+            self.flipsWaitingFor[entry.itemID] = true
         end
     end
+    -- Bags page through; best flips are only ever one page.
+    local rows = #f.flipLines
+    local pages = math.max(1, math.ceil(#shown / rows))
+    local page = mode == "bags" and math.min(math.max(self.bagPage or 1, 1), pages) or 1
+    self.bagPage = page
+    if mode == "bags" and pages > 1 then
+        f.pagePrev:Show()
+        f.pageNext:Show()
+        if page > 1 then f.pagePrev:Enable() else f.pagePrev:Disable() end
+        if page < pages then f.pageNext:Enable() else f.pageNext:Disable() end
+    else
+        f.pagePrev:Hide()
+        f.pageNext:Hide()
+    end
+    local first = (page - 1) * rows
     for i, line in ipairs(f.flipLines) do
-        local plan = shown[i]
-        f.flipRows[i].itemID = plan and plan.itemID
-        if plan then
-            line:SetText(flip.PickLine(plan))
-        elseif i == #shown + 1 and loading > 0 then
+        local entry = shown[first + i]
+        f.flipRows[i].itemID = entry and entry.itemID
+        if entry then
+            line:SetText(mode == "picks" and flip.PickLine(entry) or self.BagLine(entry))
+        elseif first + i == #shown + 1 and loading > 0 then
             line:SetText("|cff808080Looking up " .. loading .. " more...|r")
-        elseif i == 1 then
-            line:SetText(flip and flip:IsEnabled() and "No flips worth the bother right now."
-                or "Flip advice is off.")
+        elseif i == 1 and first == 0 then
+            line:SetText(empty)
         else
             line:SetText("")
         end
@@ -620,6 +748,15 @@ function Broker:OnEnable()
     self:RegisterMessage("MF_AUCTION_HOUSE_CHANGED")
     self:RegisterMessage("MF_POST_ITEM_SELECTED")
     self:RegisterEvent("GET_ITEM_INFO_RECEIVED")
+    self:RegisterEvent("BAG_UPDATE_DELAYED")
+end
+
+-- Your bags changed: redo the checked item (its advice counts your copies)
+-- and the bag list if it's showing.
+function Broker:BAG_UPDATE_DELAYED()
+    if not (self.frame and self.frame:IsShown()) then return end
+    if self.flipQuery then self:CheckFlip(self.flipQuery) end
+    if self.tab == "Flips" and (self.flipList or "bags") == "bags" then self:RefreshFlips() end
 end
 
 function Broker:OnDisable()

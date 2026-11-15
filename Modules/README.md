@@ -47,8 +47,14 @@ and 15% on its cost. Razzle's window has a **Flips** tab: type a name (or
 shift-click an item) for the plan, with the deposit (Blizzard's own figure
 at the AH, otherwise estimated from the vendor price; it comes back when
 the items sell), a warning when the history is short or the listings are
-old, and a **Show me at the AH** button that opens the buy view, like a
-bargain row. Below it, Razzle's best flips (20s profit or more). Flip never
+old, a line on what to list your own copies at, and a **Show me at the AH**
+button that opens the buy view, like a bargain row. Below it is a list:
+**Your bags** (sellable items, most valuable first, paged, refreshed when
+your bags change) or **Best flips** (20s profit or more). Clicking a row
+shows Razzle's numbers and, at the auction house, opens or searches for the
+item. Shift-clicking an item into a focused box hooks every link path the
+client may use (`ChatEdit_InsertLink`, `ChatFrameUtil.InsertLink`,
+`HandleModifiedItemClick`). Flip never
 buys or posts: each purchase and each post is the player's own click.
 
 Post hooks Blizzard's sell frames (`ItemSellFrame`, `CommoditiesSellFrame`).
