@@ -173,6 +173,13 @@ H.auctions = {}
 H.replicateCalls = 0
 C_AuctionHouse = {
     ReplicateItems = function() H.replicateCalls = H.replicateCalls + 1 end,
+    MakeItemKey = function(itemID)
+        return { itemID = itemID, itemLevel = 0, itemSuffix = 0, battlePetSpeciesID = 0 }
+    end,
+    GetItemKeyInfo = function(itemKey)
+        if H.itemKeyUnknown then return nil end
+        return { itemID = itemKey.itemID, isCommodity = false }
+    end,
     GetNumReplicateItems = function() return #H.auctions end,
     GetReplicateItemInfo = function(index) -- 0-based like the real API
         local a = H.auctions[index + 1]
@@ -198,6 +205,13 @@ local function addSellFrames(window)
         end
         window[key] = sell
     end
+    -- Browse result -> buy view, and the search bar.
+    H.selected = nil
+    function window:SelectBrowseResult(result) H.selected = result end
+    window.SearchBar = {
+        SearchBox = { SetText = function(_, text) H.searchedFor = text end },
+        StartSearch = function() H.searchStarted = true end,
+    }
 end
 
 function H.openAuctionHouse()

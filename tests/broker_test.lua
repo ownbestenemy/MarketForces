@@ -94,9 +94,28 @@ H.advance(1)
 check(refills == 1, "no refill once every board name is loaded")
 Broker.RefreshDeals = realRefresh
 
+-- Clicking a row opens the item in the AH's buy view; nothing is bought.
+local replicateBefore = H.replicateCalls
+frame.dealRows[1]:Click()
+check(H.selected and H.selected.itemKey.itemID == 9002 and H.selected.minPrice == 1000,
+    "clicking a bargain opens it in the buy view")
+check(H.plain(frame.speech.text):find("Here's the Lead Band"), "Razzle points at it")
+check(H.replicateCalls == replicateBefore, "a click doesn't scan")
+H.itemKeyUnknown = true
+H.selected = nil
+frame.dealRows[2]:Click()
+check(not H.selected and H.searchedFor == "Linen Cloth" and H.searchStarted,
+    "uncached item: falls back to a name search")
+H.itemKeyUnknown = false
+
 -- Closing the AH closes the docked window.
 H.closeAuctionHouse()
 check(not frame.shown and not Broker.docked, "docked window closes with the AH")
+
+-- Away from the AH, a click only gets directions.
+H.selected = nil
+check(Broker:ShowDeal(2589, 400):find("Meet me at the auction house") and not H.selected,
+    "no buy view when the AH is closed")
 
 -- /mf razzle opens it anywhere and toggles.
 H.slash("razzle")

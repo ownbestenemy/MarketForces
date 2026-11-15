@@ -18,6 +18,7 @@ globals = {
 read_globals = {
     "AuctionFrame",
     "AuctionHouseFrame",
+    "AuctionHouseFrameDisplayMode",
     "C_AddOns",
     "C_AuctionHouse",
     "C_Item",
