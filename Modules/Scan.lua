@@ -54,7 +54,12 @@ local function currentHouse()
     return nil -- player's own faction
 end
 
+-- Trusts the window itself when it exists, so state stays right even if
+-- events were missed while the module was off.
 function Scan:IsAuctionHouseOpen()
+    if AuctionHouseFrame and AuctionHouseFrame.IsShown then
+        return AuctionHouseFrame:IsShown() and true or false
+    end
     return self.ahOpen == true
 end
 
@@ -253,11 +258,18 @@ end
 function Scan:OnEnable()
     self:RegisterEvent("AUCTION_HOUSE_SHOW")
     self:RegisterEvent("AUCTION_HOUSE_CLOSED")
+    -- Turned on while the auction house is already open: catch up.
+    if self:IsAuctionHouseOpen() then
+        self:AUCTION_HOUSE_SHOW()
+    else
+        self.ahOpen = false
+    end
     self:UpdateButton()
 end
 
 function Scan:OnDisable()
     self:Abort()
+    self.ahOpen = false
     self.enabled = false
     self:UpdateButton()
 end

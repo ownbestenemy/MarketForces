@@ -74,6 +74,7 @@ function CreateFrame(_, name, parent)
     function f:SetText(text) self.text = text end
     function f:Show() self.shown = true end
     function f:Hide() self.shown = false end
+    function f:IsShown() return self.shown end
     function f:Enable() self.enabled = true end
     function f:Disable() self.enabled = false end
     function f:Click() if self.scripts.OnClick then self.scripts.OnClick(self) end end
@@ -119,10 +120,12 @@ C_AuctionHouse = {
 
 function H.openAuctionHouse()
     AuctionHouseFrame = AuctionHouseFrame or CreateFrame("Frame", "AuctionHouseFrame")
+    AuctionHouseFrame:Show()
     H.fire("AUCTION_HOUSE_SHOW")
 end
 
 function H.closeAuctionHouse()
+    if AuctionHouseFrame then AuctionHouseFrame:Hide() end
     H.fire("AUCTION_HOUSE_CLOSED")
 end
 

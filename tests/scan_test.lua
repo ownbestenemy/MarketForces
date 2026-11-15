@@ -111,6 +111,30 @@ H.clearChat()
 H.slash("scan")
 check(H.chatHas("Scan module is off"), "/mf scan explains the module is off")
 
+-- Disabled while open, AH closed, then re-enabled: no scan, no cooldown spent.
+H.closeAuctionHouse()
+H.npcFaction = nil
+H.advance(15 * 60)
+H.openAuctionHouse()
+H.slash("disable scan")
+H.closeAuctionHouse()
+H.slash("enable scan")
+local calls = H.replicateCalls
+H.clearChat()
+H.slash("scan")
+check(H.replicateCalls == calls and H.chatHas("Open the auction house first"), "re-enabled after AH closed: refuses")
+check(Scan:CooldownRemaining() == 0, "no cooldown spent on a refused scan")
+
+-- AH opened while disabled, then enabled: scanning works without reopening.
+H.slash("disable scan")
+H.openAuctionHouse()
+H.slash("enable scan")
+H.slash("scan")
+check(H.replicateCalls == calls + 1, "enabled with AH already open: scan allowed")
+H.fire("REPLICATE_ITEM_LIST_UPDATE")
+H.runTimers()
+H.closeAuctionHouse()
+
 -- A client without full scans.
 H.slash("enable scan")
 C_AuctionHouse.ReplicateItems = nil
