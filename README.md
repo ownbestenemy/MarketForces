@@ -5,8 +5,7 @@ addons: scan the auction house, keep price history,
 show prices on tooltips and help you post.
 
 **Status:** the core framework, scanning, price history and tooltips are
-built: open
-the auction house, click **Full Scan** (or type `/mf scan`), then
+built: open the auction house, click **Full Scan** (or type `/mf scan`), then
 item tooltips (or `/mf price <item>`) show what it's worth. Razzle's window
 and posting are next, each as its own module.
 
