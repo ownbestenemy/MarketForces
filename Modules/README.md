@@ -8,11 +8,25 @@ the Core files and `Core\Core.lua`. Planned modules:
 | Scan | Query the auction house through `C_AuctionHouse` (items and commodities) and send `MF_SCAN_COMPLETE` with the results |
 | Prices | Listen for scans and keep per item price history in `db.ah` |
 | Tooltip | Show stored prices on item tooltips |
-| Post | Suggest prices and post auctions |
+| Post | Suggest prices; post or cancel only when the player clicks |
+| Broker | The goblin broker: its window, greetings and advice, built on the modules above |
 
 Modules never call each other directly. They send and listen for messages
 (`self:SendMessage("MF_SCAN_COMPLETE", results)`), so any one can be turned
 off with `/mf disable <name>` without breaking the others.
+
+## Rules every module follows
+
+These keep MarketForces within Blizzard's add-on policy (see the main
+README). A pull request that breaks one doesn't get merged.
+
+- Protected auction calls (post, bid, buyout, cancel) run only inside a
+  click handler, one action per click. No loops, timers or queues that
+  fire them.
+- Searches use `C_AuctionHouse`, wait for the client's throttle, and stop
+  when the auction house closes (`AUCTION_HOUSE_CLOSED`).
+- No web requests or outside data. Store only what the client shows.
+- Saved data is pruned so it doesn't grow forever.
 
 ## Template
 
