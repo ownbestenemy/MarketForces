@@ -63,6 +63,13 @@ check(sell.QuantityInput.quantity == 10, "capped at what the market holds")
 check(H.plain(razzle.speech.text):find("You've got 35, but the market only holds about 10", 1, true),
     "Razzle explains the cap")
 
+-- Another pick before the next frame keeps its own numbers.
+sell.QuantityInput.quantity = nil
+HandleModifiedItemClick(linen, ItemLocation:CreateFromBagAndSlot(0, 2))
+sell:SetItem({ itemID = 2770 })
+H.runTimers()
+check(sell.QuantityInput.quantity == nil, "a newer pick doesn't get the old quantity")
+
 -- Bound items aren't sold.
 H.postItemSet = nil
 local band = "|cffffffff|Hitem:9002::::::::60:::::|h[Lead Band]|h|r"

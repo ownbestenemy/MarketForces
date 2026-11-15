@@ -178,17 +178,23 @@ function Post:SellFromBags(link, location)
     local p = MF.Prices and MF.Prices:GetPrice(itemID)
     local stackSize = select(8, (C_Item and C_Item.GetItemInfo or GetItemInfo)(itemID))
     local quantity, capped = Post.SuggestQuantity(owned, p and p.quantity, tonumber(stackSize))
+    -- The sell frame now holding this item, and its selection token, so a
+    -- different pick before the next frame doesn't get this item's numbers.
+    local target, token
+    for _, key in ipairs({ "CommoditiesSellFrame", "ItemSellFrame" }) do
+        local sellFrame = window[key]
+        if sellFrame and sellFrame.IsShown and sellFrame:IsShown() then
+            target, token = sellFrame, pending[sellFrame]
+            break
+        end
+    end
     -- After Blizzard (and OnItemSet's price) settle, on the next frame.
     C_Timer.After(0, function()
-        for _, key in ipairs({ "CommoditiesSellFrame", "ItemSellFrame" }) do
-            local sellFrame = window[key]
-            if sellFrame and sellFrame.IsShown and sellFrame:IsShown() then
-                local qty = sellFrame.QuantityInput
-                if qty and qty.SetQuantity then pcall(qty.SetQuantity, qty, quantity) end
-                local drop = sellFrame.Duration or sellFrame.DurationDropdown
-                if drop and drop.SetDuration then pcall(drop.SetDuration, drop, duration) end
-            end
-        end
+        if not (target and Post:IsEnabled() and pending[target] == token and target:IsShown()) then return end
+        local qty = target.QuantityInput
+        if qty and qty.SetQuantity then pcall(qty.SetQuantity, qty, quantity) end
+        local drop = target.Duration or target.DurationDropdown
+        if drop and drop.SetDuration then pcall(drop.SetDuration, drop, duration) end
     end)
     local suggestion = self:Suggest(itemID)
     local line = string.format("Putting up %d %s", quantity, name)
