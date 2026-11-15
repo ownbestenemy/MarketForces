@@ -5,7 +5,7 @@ the Core files and `Core\Core.lua`. Planned modules:
 
 | Module | Job |
 | --- | --- |
-| Scan | Query the auction house (full or page by page) and send `MF_SCAN_COMPLETE` with the results |
+| Scan | Query the auction house through `C_AuctionHouse` (items and commodities) and send `MF_SCAN_COMPLETE` with the results |
 | Prices | Listen for scans and keep per item price history in `db.ah` |
 | Tooltip | Show stored prices on item tooltips |
 | Post | Suggest prices and post auctions |

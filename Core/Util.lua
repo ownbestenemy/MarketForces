@@ -52,8 +52,11 @@ function Util.SplitFirstWord(text)
     return first or "", rest or ""
 end
 
--- Key for the auction house the player is using: "Realm-Faction".
--- Pass "Neutral" when at a goblin auction house.
+-- Key for the auction house the player is using: "<scope>-<house>".
+-- house is the faction AH ("Alliance"/"Horde"), or "Neutral" for the goblin
+-- AH (pass it in). WoW: Forever is realmless, so scope is whatever
+-- GetRealmName() reports there (expected to identify the ruleset); this is
+-- the one place to change if that turns out to need different handling.
 function Util.GetAuctionKey(faction)
     local realm = (GetRealmName and GetRealmName()) or "UnknownRealm"
     faction = faction or (UnitFactionGroup and UnitFactionGroup("player")) or "Neutral"

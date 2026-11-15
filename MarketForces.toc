@@ -1,6 +1,6 @@
-## Interface: 20505
+## Interface: 16001
 ## Title: MarketForces
-## Notes: Auction house scanning, price history, tooltips and posting for The Burning Crusade.
+## Notes: Auction house scanning, price history, tooltips and posting for WoW: Forever.
 ## Author: ownbestenemy
 ## Version: 0.1.0
 ## SavedVariables: MarketForcesDB

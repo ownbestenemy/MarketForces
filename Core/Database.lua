@@ -3,15 +3,16 @@
 -- MarketForcesDB (account-wide) layout:
 --   schema         number, bumped when the layout changes (see MIGRATIONS)
 --   global         settings shared by every character
---   auctionHouses  ["Realm-Faction"] = data for one auction house
---                  (price history etc.; "Realm-Neutral" for goblin AHs)
+--   auctionHouses  ["<scope>-<house>"] = data for one auction house
+--                  (price history etc.). house is Alliance, Horde or
+--                  Neutral; see Util.GetAuctionKey for scope.
 -- MarketForcesCharDB (per character) holds character-only settings.
 --
 -- After MF:InitDatabase() runs:
 --   MF.db.global  -> MarketForcesDB.global
 --   MF.db.char    -> MarketForcesCharDB
 -- After MF:InitAuctionHouseDB() runs (at PLAYER_LOGIN, once faction is known):
---   MF.db.ah      -> MarketForcesDB.auctionHouses[<this realm-faction>]
+--   MF.db.ah      -> MarketForcesDB.auctionHouses[<current house key>]
 local _, MF = ...
 
 local Util = MF.Util

@@ -1,7 +1,7 @@
 # MarketForces
 
-An auction house addon for World of Warcraft: The Burning Crusade, in the
-spirit of the classic AH addons: scan the auction house, keep price history,
+An auction house addon for WoW: Forever, in the spirit of the classic AH
+addons: scan the auction house, keep price history,
 show prices on tooltips and help you post.
 
 **Status:** core framework only. The addon loads, saves data and has a `/mf`
@@ -10,8 +10,8 @@ built yet. Each one will arrive as its own module.
 
 ## Install
 
-1. Copy this folder into `World of Warcraft/_anniversary_/Interface/AddOns/`
-   (or your TBC client's `Interface/AddOns/`) and name it `MarketForces`.
+1. Copy this folder into `World of Warcraft/_forever_/Interface/AddOns/`
+   and name it `MarketForces`.
 2. Restart the game or `/reload`.
 
 If the addon shows as "out of date", check your client's interface number in
@@ -46,8 +46,13 @@ tests/run.lua      offline smoke test with a fake WoW API
 ```
 
 Saved data is split three ways: account-wide settings, per-character settings,
-and per auction house data keyed `Realm-Faction` (`Realm-Neutral` for the
-goblin auction houses), which is where price history will live.
+and per auction house data, which is where price history will live. Forever is
+realmless, so each auction house is keyed by what `GetRealmName()` reports
+(expected to name the ruleset) plus the house: Alliance, Horde or Neutral.
+
+Forever runs on the modern (Mainline-based) client, so the Scan and Post
+modules will use the `C_AuctionHouse` API, including commodity (unit-priced)
+listings, rather than the old `QueryAuctionItems` API.
 
 ## Development
 
