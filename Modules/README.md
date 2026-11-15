@@ -9,7 +9,7 @@ the Core files and `Core\Core.lua`. Planned modules:
 | Prices | Listen for scans and keep per item price history in `db.ah` |
 | Tooltip | Show stored prices on item tooltips |
 | Post | Suggest prices; post or cancel only when the player clicks |
-| Broker | The goblin broker: its window, greetings and advice, built on the modules above |
+| Broker | Razzle, the goblin broker of Razzle's Dazzles: the window, greetings and advice, built on the modules above |
 
 Modules never call each other directly. They send and listen for messages
 (`self:SendMessage("MF_SCAN_COMPLETE", results)`), so any one can be turned

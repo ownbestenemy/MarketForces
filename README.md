@@ -8,14 +8,14 @@ show prices on tooltips and help you post.
 command, but the features (scanning, price history, tooltips, posting) are not
 built yet. Each one will arrive as its own module.
 
-## Design: your goblin broker
+## Design: Razzle's Dazzles
 
-MarketForces presents itself as a goblin auction broker: a character the
-player talks to rather than a spreadsheet. When the auction house opens, the
-broker greets you, tells you what has changed since your last visit, and
+MarketForces presents itself as Razzle, the goblin auction broker behind
+Razzle's Dazzles: a character the player talks to rather than a spreadsheet. When the auction house opens,
+Razzle greets you, tells you what has changed since your last visit, and
 offers advice ("Copper Bars are going cheap today, boss"). Its window is where
-you look up prices, review suggested listings and decide what to post. The
-broker suggests and explains; you make every decision and every click.
+you look up prices, review suggested listings and decide what to post. Razzle
+suggests and explains; you make every decision and every click.
 
 The persona lives in its own Broker module (UI and voice), on top of the data
 modules, so the data side stays plain and testable.
