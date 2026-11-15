@@ -69,25 +69,55 @@ end
 -- Frames and events ----------------------------------------------------------------
 
 local frames = {}
-function CreateFrame(_, name, parent)
-    local f = { registered = {}, scripts = {}, name = name, parent = parent, shown = true, enabled = true }
-    function f:RegisterEvent(e) self.registered[e] = true end
-    function f:UnregisterEvent(e) self.registered[e] = nil end
-    function f:SetScript(script, fn) self.scripts[script] = fn end
-    function f:SetSize() end
-    function f:SetPoint() end
-    function f:SetText(text) self.text = text end
-    function f:Show() self.shown = true end
-    function f:Hide() self.shown = false end
-    function f:IsShown() return self.shown end
-    function f:Enable() self.enabled = true end
-    function f:Disable() self.enabled = false end
-    function f:GetName() return self.name end
-    function f:Click() if self.scripts.OnClick then self.scripts.OnClick(self) end end
+local noop = function() end
+
+-- Fake region (frame, texture or font string). Layout methods are no-ops;
+-- the rest behave enough for the tests.
+local function newRegion(kind, name, parent)
+    local r = {
+        kind = kind, registered = {}, scripts = {}, name = name, parent = parent,
+        shown = kind ~= "Frame" or true, enabled = true, points = {},
+    }
+    function r:RegisterEvent(e) self.registered[e] = true end
+    function r:UnregisterEvent(e) self.registered[e] = nil end
+    function r:SetScript(script, fn) self.scripts[script] = fn end
+    function r:SetText(text) self.text = text end
+    function r:GetText() return self.text or "" end
+    function r:Show() self.shown = true end
+    function r:Hide() self.shown = false end
+    function r:IsShown() return self.shown end
+    function r:Enable() self.enabled = true end
+    function r:Disable() self.enabled = false end
+    function r:GetName() return self.name end
+    function r:SetPoint(...) self.points[#self.points + 1] = { ... } end
+    function r:ClearAllPoints() self.points = {} end
+    function r:GetPoint() local p = self.points[1] or {} return p[1], p[2], p[3], p[4], p[5] end
+    function r:GetFrameLevel() return 1 end
+    function r:GetFrameStrata() return "MEDIUM" end
+    function r:HasFocus() return self.focus == true end
+    function r:Click() if self.scripts.OnClick then self.scripts.OnClick(self) end end
+    function r:CreateFontString() return newRegion("FontString", nil, self) end
+    function r:CreateTexture() return newRegion("Texture", nil, self) end
+    for _, method in ipairs({
+        "SetSize", "SetWidth", "SetFrameStrata", "SetFrameLevel", "SetClampedToScreen", "EnableMouse",
+        "SetMovable", "RegisterForDrag", "StartMoving", "StopMovingOrSizing", "SetJustifyH", "SetWordWrap",
+        "SetTexture", "SetAutoFocus", "ClearFocus",
+    }) do
+        r[method] = noop
+    end
+    return r
+end
+
+function CreateFrame(kind, name, parent)
+    local f = newRegion(kind or "Frame", name, parent)
     frames[#frames + 1] = f
     if name then _G[name] = f end
     return f
 end
+
+UIParent = CreateFrame("Frame", "UIParent")
+C_Item = { GetItemInfo = function(itemID) return H.itemNames and H.itemNames[itemID] end }
+H.itemNames = { [2589] = "Linen Cloth", [2770] = "Copper Ore" }
 
 function H.fire(event, ...)
     for _, f in ipairs(frames) do
