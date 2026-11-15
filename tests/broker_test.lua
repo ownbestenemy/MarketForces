@@ -26,28 +26,73 @@ check(frame.speech.text:find("haven't scouted"), "first-visit greeting shown")
 
 -- Scan: linen has a cheap listing, ore doesn't.
 H.auctions = {
-    { itemID = 2589, count = 1, buyout = 40 },    -- linen at 40c
-    { itemID = 2589, count = 9, buyout = 900 },   -- linen at 100c
-    { itemID = 2770, count = 10, buyout = 1000 }, -- ore at 100c
+    { itemID = 2589, count = 1, buyout = 400 },     -- linen at 4s
+    { itemID = 2589, count = 9, buyout = 9000 },    -- linen at 10s
+    { itemID = 2770, count = 10, buyout = 10000 },  -- ore at 10s
 }
 H.slash("scan")
 H.fire("REPLICATE_ITEM_LIST_UPDATE")
 H.runTimers()
--- market for linen: cheapest 30% of 10 units = 3 units: 40 + 100 + 100 -> 80; 40 <= 0.7 * 80
+-- market for linen: cheapest 30% of 10 units = 3 units: 4s + 10s + 10s -> 8s; 4s <= 0.7 * 8s
 local deals = Broker:FindDeals()
 check(#deals == 1 and deals[1].itemID == 2589, "cheap linen found as a bargain")
-check(H.plain(Broker.DealLine(deals[1])) == "Linen Cloth: 40c each (50% off), 10 listed", "bargain line")
+check(H.plain(Broker.DealLine(deals[1])) == "Linen Cloth  4s, worth 8s (10 listed)", "bargain line")
+check(deals[1].label == "|cffffffffLinen Cloth|r", "name in its quality colour")
 check(frame.speech.text:find("3 auctions. I found 1 bargain worth"), "Razzle reports the scan")
 check(H.plain(frame.dealLines[1].text):find("Linen Cloth"), "bargain listed in the window")
 
 -- Price check box.
 check(H.plain(Broker:Lookup("|cffffffff|Hitem:2770::::::::60:::::|h[Copper Ore]|h|r"))
-    == "Copper Ore: worth about 1s. Cheapest now: 1s, 10 listed.", "price check by link")
+    == "Copper Ore: worth about 10s. Cheapest now: 10s, 10 listed.", "price check by link")
 check(Broker:Lookup("424242"):find("Never seen item #424242"), "price check for an unknown item")
 check(Broker:Lookup("hello"):find("Shift%-click"), "price check with no item")
 frame.box:SetText("2589")
 frame.box.scripts.OnEnterPressed(frame.box)
-check(H.plain(frame.answer.text):find("Linen Cloth: worth about 80c"), "pressing Enter answers")
+check(H.plain(frame.answer.text):find("Linen Cloth: worth about 8s"), "pressing Enter answers")
+
+-- The board: names load late, junk stays off, most coin saved comes first.
+H.auctions = {
+    { itemID = 2589, count = 1, buyout = 400 },     -- linen: saves 4s
+    { itemID = 2589, count = 9, buyout = 9000 },
+    { itemID = 9001, count = 1, buyout = 2 },       -- junk: 2c vs 4c, saves 2c
+    { itemID = 9001, count = 9, buyout = 54 },
+    { itemID = 9002, count = 1, buyout = 1000 },    -- unloaded item: 10s vs 70s, saves 60s
+    { itemID = 9002, count = 9, buyout = 90000 },
+}
+H.itemNames[9001] = "Broken Fang"
+H.advance(20 * 60)
+H.slash("scan")
+H.fire("REPLICATE_ITEM_LIST_UPDATE")
+H.runTimers()
+deals = Broker:FindDeals()
+check(#deals == 2 and deals[1].itemID == 9002 and deals[2].itemID == 2589,
+    "sorted by coin saved; tiny savings left off")
+check(deals[1].label == nil and H.itemRequests and H.itemRequests[9002], "unloaded name requested")
+check(H.plain(frame.dealLines[1].text) == "Linen Cloth  4s, worth 8s (10 listed)",
+    "rows still loading aren't shown as item #")
+check(H.plain(frame.dealLines[2].text) == "Looking up 1 more...", "board says a row is loading")
+check(frame.speech.text:find("I found 2 bargains"), "greeting counts the loading row")
+local greeting = frame.speech.text
+local refills = 0
+local realRefresh = Broker.RefreshDeals
+Broker.RefreshDeals = function(...) refills = refills + 1 return realRefresh(...) end
+H.fire("GET_ITEM_INFO_RECEIVED", 2770, true)
+H.advance(1)
+check(refills == 0, "unrelated item loads don't refill the board")
+H.itemNames[9002] = "Lead Band"
+H.itemIcons = { [9002] = 133345 }
+H.fire("GET_ITEM_INFO_RECEIVED", 9002, true)
+H.fire("GET_ITEM_INFO_RECEIVED", 2589, true)
+H.advance(1)
+check(H.plain(frame.dealLines[1].text) == "Lead Band  10s, worth 70s (10 listed)", "row appears once the name loads")
+check(frame.dealLines[1].text:find("|T133345:14:14|t", 1, true), "row shows the item icon")
+check(frame.dealRows[1].itemID == 9002, "row knows its item for the hover tooltip")
+check(frame.speech.text == greeting, "name loading leaves Razzle's speech alone")
+check(refills == 1, "one refill for a burst of loads")
+H.fire("GET_ITEM_INFO_RECEIVED", 9002, true)
+H.advance(1)
+check(refills == 1, "no refill once every board name is loaded")
+Broker.RefreshDeals = realRefresh
 
 -- Closing the AH closes the docked window.
 H.closeAuctionHouse()
@@ -85,7 +130,8 @@ check(H.plain(frame.dealLines[1].text) == "Nothing cheap enough to shout about."
 H.closeAuctionHouse()
 H.npcFaction = nil
 H.openAuctionHouse()
-check(H.plain(frame.dealLines[1].text):find("Linen Cloth"), "faction bargains back at the faction AH")
+check(H.plain(frame.dealLines[1].text):find("Lead Band") and H.plain(frame.dealLines[2].text):find("Linen Cloth"),
+    "faction bargains back at the faction AH")
 H.closeAuctionHouse()
 
 -- A late-loading AH window closed before it appears: no stray window.

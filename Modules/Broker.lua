@@ -16,6 +16,7 @@ local Broker = MF:NewModule("Broker", {
     global = {
         dockAtAuctionHouse = true, -- open beside the AH window
         dealRatio = 0.7,           -- a bargain is listed at or below 70% of market value
+        minSavings = 100,          -- and saves at least this much per unit (1s), so junk stays off the board
         maxDeals = 8,
         point = nil,               -- saved position of the free window
     },
@@ -27,11 +28,32 @@ Broker.TITLE = "Razzle's Dazzles"
 
 local DAY = 24 * 60 * 60
 
+local function getItemInfo(itemID)
+    local getInfo = (C_Item and C_Item.GetItemInfo) or GetItemInfo
+    if not getInfo then return nil end
+    return getInfo(itemID)
+end
+
 -- Item name, or a placeholder until the client has it cached.
 function Broker.ItemName(itemID)
-    local getInfo = (C_Item and C_Item.GetItemInfo) or GetItemInfo
-    local name = getInfo and getInfo(itemID)
-    return name or ("item #" .. itemID)
+    return getItemInfo(itemID) or ("item #" .. itemID)
+end
+
+-- The item's name in its quality colour with its icon, ready for a font
+-- string, or nil when the client hasn't loaded the item yet (in which case
+-- we ask for it; GET_ITEM_INFO_RECEIVED says when it's there).
+function Broker.ItemLabel(itemID)
+    local name, _, quality, _, _, _, _, _, _, icon = getItemInfo(itemID)
+    if not name then
+        if C_Item and C_Item.RequestLoadItemDataByID then C_Item.RequestLoadItemDataByID(itemID) end
+        return nil
+    end
+    local color = quality and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[quality]
+    local label = (color and color.hex) and (color.hex .. name .. "|r") or name
+    if icon and icon ~= 0 and icon ~= "" then
+        label = "|T" .. icon .. ":14:14|t " .. label
+    end
+    return label
 end
 
 -- Razzle's opening line. info: { scanned = bool, age = seconds since last
@@ -77,16 +99,20 @@ function Broker.PostLine(itemID, suggestion, p, filled)
     return line
 end
 
--- Items listed well below market value at the current auction house,
--- biggest discount first: { itemID, minBuyout, market, quantity, ratio }.
+-- Items listed well below market value at the current auction house, most
+-- coin saved per unit first: { itemID, label, minBuyout, market, quantity,
+-- ratio }. label is nil while the client is still loading the item's name
+-- (it's requested; the board shows the row once it arrives).
 function Broker:FindDeals()
     local prices = MF.Prices
     if not (prices and prices:IsEnabled()) then return {} end
     local ratio = self.db.global.dealRatio
+    local minSavings = self.db.global.minSavings or 0
     local deals = {}
     for itemID in pairs(prices:ItemsFor()) do
         local p = prices:GetPrice(itemID)
-        if p and p.market and p.minBuyout and p.market > 0 and p.minBuyout <= p.market * ratio then
+        if p and p.market and p.minBuyout and p.market > 0 and p.minBuyout <= p.market * ratio
+            and p.market - p.minBuyout >= minSavings then
             deals[#deals + 1] = {
                 itemID = itemID, minBuyout = p.minBuyout, market = p.market,
                 quantity = p.quantity, ratio = p.minBuyout / p.market,
@@ -94,17 +120,20 @@ function Broker:FindDeals()
         end
     end
     table.sort(deals, function(a, b)
-        if a.ratio ~= b.ratio then return a.ratio < b.ratio end
+        local sa, sb = a.market - a.minBuyout, b.market - b.minBuyout
+        if sa ~= sb then return sa > sb end
         return a.itemID < b.itemID
     end)
     local limit = self.db.global.maxDeals
     for i = #deals, limit + 1, -1 do deals[i] = nil end
+    for _, deal in ipairs(deals) do deal.label = Broker.ItemLabel(deal.itemID) end
     return deals
 end
 
+-- One row on the board, e.g. "Lead Band  25s, worth 56s (6 listed)".
 function Broker.DealLine(deal)
-    return string.format("%s: %s each (%d%% off), %d listed", Broker.ItemName(deal.itemID),
-        Util.FormatMoney(deal.minBuyout), math.floor((1 - deal.ratio) * 100 + 0.5), deal.quantity)
+    return string.format("%s  %s, worth %s (%d listed)", deal.label or Broker.ItemName(deal.itemID),
+        Util.FormatMoney(deal.minBuyout), Util.FormatMoney(deal.market), deal.quantity)
 end
 
 -- Razzle's answer for a typed item link or ID.
@@ -178,13 +207,26 @@ function Broker:CreateWindow()
     dealsHeader:SetPoint("TOPLEFT", portrait, "BOTTOMLEFT", 0, -40)
     dealsHeader:SetText("Bargains on the board")
 
-    f.dealLines = {}
+    -- Each row is a button so hovering it shows the item's tooltip.
+    f.dealLines, f.dealRows = {}, {}
     local previous = dealsHeader
     for i = 1, self.db.global.maxDeals do
-        local line = newText(f, "GameFontHighlightSmall", 290)
-        line:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, -4)
-        f.dealLines[i] = line
-        previous = line
+        local row = CreateFrame("Button", nil, f)
+        row:SetSize(290, 16)
+        row:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, -3)
+        local line = newText(row, "GameFontHighlightSmall", 290)
+        line:SetPoint("LEFT", row, "LEFT", 0, 0)
+        if line.SetWordWrap then line:SetWordWrap(false) end
+        row:SetScript("OnEnter", function(button)
+            if button.itemID and GameTooltip then
+                GameTooltip:SetOwner(button, "ANCHOR_RIGHT")
+                GameTooltip:SetItemByID(button.itemID)
+                GameTooltip:Show()
+            end
+        end)
+        row:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+        f.dealLines[i], f.dealRows[i] = line, row
+        previous = row
     end
 
     local lookupLabel = newText(f, "GameFontNormal")
@@ -220,10 +262,32 @@ function Broker:Refresh(extra)
     local f = self.frame
     if not f then return end
     f.speech:SetText(self.Greeting(self:CurrentInfo(extra)))
+    self:RefreshDeals()
+end
+
+-- Fills the board. Rows whose item names are still loading are skipped
+-- until GET_ITEM_INFO_RECEIVED brings them in.
+function Broker:RefreshDeals()
+    local f = self.frame
+    if not f then return end
     local deals = self:FindDeals()
+    local shown, loading = {}, 0
+    self.waitingFor = {}
+    for _, deal in ipairs(deals) do
+        if deal.label then
+            shown[#shown + 1] = deal
+        else
+            loading = loading + 1
+            self.waitingFor[deal.itemID] = true
+        end
+    end
     for i, line in ipairs(f.dealLines) do
-        if deals[i] then
-            line:SetText(self.DealLine(deals[i]))
+        local deal = shown[i]
+        f.dealRows[i].itemID = deal and deal.itemID
+        if deal then
+            line:SetText(self.DealLine(deal))
+        elseif i == #shown + 1 and loading > 0 then
+            line:SetText("|cff808080Looking up " .. loading .. " more...|r")
         elseif i == 1 then
             line:SetText("Nothing cheap enough to shout about.")
         else
@@ -303,6 +367,20 @@ function Broker:MF_POST_ITEM_SELECTED(_, itemID, suggestion, p)
     self.frame.speech:SetText(self.PostLine(itemID, suggestion, p, filled))
 end
 
+-- An item the board was waiting on has loaded: refill the board once, a
+-- moment later, since these arrive in bursts. Other items' events are
+-- ignored, since refilling walks the whole price history. Razzle's speech
+-- is left alone.
+function Broker:GET_ITEM_INFO_RECEIVED(_, itemID)
+    if not (self.waitingFor and itemID and self.waitingFor[itemID]) then return end
+    if self.namesPending or not (self.frame and self.frame:IsShown()) then return end
+    self.namesPending = true
+    C_Timer.After(0.2, function()
+        Broker.namesPending = false
+        if Broker:IsEnabled() and Broker.frame and Broker.frame:IsShown() then Broker:RefreshDeals() end
+    end)
+end
+
 -- Faction and goblin auction houses keep separate prices: when the house
 -- switches (possibly after we docked), show the new house's numbers.
 function Broker:MF_AUCTION_HOUSE_CHANGED()
@@ -339,6 +417,7 @@ function Broker:OnEnable()
     self:RegisterMessage("MF_PRICES_UPDATED")
     self:RegisterMessage("MF_AUCTION_HOUSE_CHANGED")
     self:RegisterMessage("MF_POST_ITEM_SELECTED")
+    self:RegisterEvent("GET_ITEM_INFO_RECEIVED")
 end
 
 function Broker:OnDisable()

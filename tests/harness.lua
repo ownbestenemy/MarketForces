@@ -25,9 +25,9 @@ SlashCmdList = {}
 
 function H.slash(text) SlashCmdList.MARKETFORCES(text) end
 
--- Chat text with WoW color codes removed.
+-- Chat text with WoW color codes and inline icons removed.
 function H.plain(text)
-    return (text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""))
+    return (text:gsub("|T.-|t ?", ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""))
 end
 
 function H.chatHas(pattern)
@@ -135,11 +135,17 @@ C_Item = {
         local name = H.itemNames and H.itemNames[itemID]
         local sell = H.vendorPrices and H.vendorPrices[itemID]
         if not name and not sell then return nil end
-        return name, nil, 1, 1, 1, "", "", 1, "", 0, sell or 0
+        local icon = H.itemIcons and H.itemIcons[itemID] or 0
+        return name, nil, 1, 1, 1, "", "", 1, "", icon, sell or 0
+    end,
+    RequestLoadItemDataByID = function(itemID)
+        H.itemRequests = H.itemRequests or {}
+        H.itemRequests[itemID] = true
     end,
     GetItemID = function(location) return location.itemID end,
 }
 H.itemNames = { [2589] = "Linen Cloth", [2770] = "Copper Ore" }
+ITEM_QUALITY_COLORS = { [1] = { hex = "|cffffffff" } }
 
 function H.fire(event, ...)
     for _, f in ipairs(frames) do
