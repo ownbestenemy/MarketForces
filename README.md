@@ -4,10 +4,10 @@ An auction house addon for WoW: Forever, in the spirit of the classic AH
 addons: scan the auction house, keep price history,
 show prices on tooltips and help you post.
 
-**Status:** the core framework and the Scan module are built: open the
-auction house and click **Full Scan** (or type `/mf scan`) to read every
-auction. Price history, tooltips, posting and Razzle's window are next, each
-as its own module.
+**Status:** the core framework, scanning and price history are built: open
+the auction house, click **Full Scan** (or type `/mf scan`), then
+`/mf price <item>` shows what it's worth. Tooltips, posting and Razzle's
+window are next, each as its own module.
 
 ## Design: Razzle's Dazzles
 
@@ -62,6 +62,7 @@ game with `/dump select(4, GetBuildInfo())` and update `## Interface:` in
 | `/mf` or `/mf help` | List commands |
 | `/mf version` | Show the addon version |
 | `/mf scan` | Full scan of the open auction house (same as the Full Scan button) |
+| `/mf price <item>` | Market value and cheapest current listing (shift-click an item, or give its ID) |
 | `/mf status` | When this auction house was last scanned, and when the next scan is allowed |
 | `/mf modules` | List modules and whether each is on |
 | `/mf enable <module>` / `/mf disable <module>` | Turn a module on or off (saved) |
@@ -82,6 +83,7 @@ Core/
   Core.lua         startup (loaded last)
 Modules/           feature modules (see Modules/README.md)
   Scan.lua         full auction house scan, one per click
+  Prices.lua       price history, market value, pruning
 tests/             offline tests against a fake WoW API (run.lua runs them all)
 ```
 

@@ -25,9 +25,14 @@ SlashCmdList = {}
 
 function H.slash(text) SlashCmdList.MARKETFORCES(text) end
 
+-- Chat text with WoW color codes removed.
+function H.plain(text)
+    return (text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""))
+end
+
 function H.chatHas(pattern)
     for _, line in ipairs(H.chat) do
-        if line:find(pattern) then return true end
+        if H.plain(line):find(pattern) then return true end
     end
     return false
 end
@@ -74,8 +79,10 @@ function CreateFrame(_, name, parent)
     function f:SetText(text) self.text = text end
     function f:Show() self.shown = true end
     function f:Hide() self.shown = false end
+    function f:IsShown() return self.shown end
     function f:Enable() self.enabled = true end
     function f:Disable() self.enabled = false end
+    function f:GetName() return self.name end
     function f:Click() if self.scripts.OnClick then self.scripts.OnClick(self) end end
     frames[#frames + 1] = f
     if name then _G[name] = f end
@@ -117,12 +124,26 @@ C_AuctionHouse = {
     end,
 }
 
+-- Which Blizzard window the fake client uses, and whether it appears only
+-- after AUCTION_HOUSE_SHOW (load on demand).
+H.windowName = "AuctionHouseFrame"
+H.windowLoadsLate = false
+
 function H.openAuctionHouse()
-    AuctionHouseFrame = AuctionHouseFrame or CreateFrame("Frame", "AuctionHouseFrame")
+    local window = _G[H.windowName]
+    if not window and not H.windowLoadsLate then
+        window = CreateFrame("Frame", H.windowName)
+    end
+    if window then window:Show() end
     H.fire("AUCTION_HOUSE_SHOW")
+    if not window and H.windowLoadsLate then
+        CreateFrame("Frame", H.windowName):Show()
+    end
 end
 
 function H.closeAuctionHouse()
+    local window = _G[H.windowName]
+    if window then window:Hide() end
     H.fire("AUCTION_HOUSE_CLOSED")
 end
 
