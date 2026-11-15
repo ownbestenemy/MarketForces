@@ -83,8 +83,10 @@ tests/run.lua      offline smoke test with a fake WoW API
 
 Saved data is split three ways: account-wide settings, per-character settings,
 and per auction house data, which is where price history will live. Forever is
-realmless, so each auction house is keyed by what `GetRealmName()` reports
-(expected to name the ruleset) plus the house: Alliance, Horde or Neutral.
+realmless: `GetRealmName()` reports a backend shard like
+`CAMWOW US1 Realm 9 RP PvP`, so each auction house is keyed by region,
+ruleset and house instead, e.g. `US-RP PvP-Horde` (house is Alliance, Horde
+or Neutral).
 
 Forever runs on the modern (Mainline-based) client, so the Scan and Post
 modules will use the `C_AuctionHouse` API, including commodity (unit-priced)

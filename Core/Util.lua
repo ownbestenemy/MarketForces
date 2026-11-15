@@ -52,13 +52,22 @@ function Util.SplitFirstWord(text)
     return first or "", rest or ""
 end
 
--- Key for the auction house the player is using: "<scope>-<house>".
--- house is the faction AH ("Alliance"/"Horde"), or "Neutral" for the goblin
--- AH (pass it in). WoW: Forever is realmless, so scope is whatever
--- GetRealmName() reports there (expected to identify the ruleset); this is
--- the one place to change if that turns out to need different handling.
+-- WoW: Forever is realmless: GetRealmName() reports a backend shard such as
+-- "CAMWOW US1 Realm 9 RP PvP". Auction houses are shared per region and
+-- ruleset, not per shard, so we reduce that to "US-RP PvP". A name that
+-- doesn't look like a Forever shard is returned unchanged.
+function Util.GetMarketScope(realmName)
+    realmName = realmName or (GetRealmName and GetRealmName()) or "UnknownRealm"
+    local region, ruleset = realmName:match("^%S+%s+(%a+)%d*%s+Realm%s+%d+%s*(.-)%s*$")
+    if not region then return realmName end
+    if ruleset == "" then ruleset = "Normal" end
+    return region:upper() .. "-" .. ruleset
+end
+
+-- Key for the auction house the player is using: "<scope>-<house>", e.g.
+-- "US-RP PvP-Horde". house is the faction AH ("Alliance"/"Horde"), or
+-- "Neutral" for the goblin AH (pass it in).
 function Util.GetAuctionKey(faction)
-    local realm = (GetRealmName and GetRealmName()) or "UnknownRealm"
     faction = faction or (UnitFactionGroup and UnitFactionGroup("player")) or "Neutral"
-    return realm .. "-" .. faction
+    return Util.GetMarketScope() .. "-" .. faction
 end

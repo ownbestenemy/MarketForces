@@ -25,7 +25,8 @@ function CreateFrame()
     frames[#frames + 1] = f
     return f
 end
-function GetRealmName() return "Testrealm" end
+local realmName = "Testrealm"
+function GetRealmName() return realmName end
 function UnitFactionGroup() return "Horde" end
 function GetAddOnMetadata(_, key) if key == "Version" then return "0.1.0" end end
 
@@ -126,6 +127,17 @@ check(strip(MF.Util.FormatMoney(123456)) == "12g 34s 56c", "FormatMoney full")
 check(strip(MF.Util.FormatMoney(10000)) == "1g", "FormatMoney drops zero parts")
 check(strip(MF.Util.FormatMoney(0)) == "0c", "FormatMoney zero")
 check(strip(MF.Util.FormatMoney(-250)) == "-2s 50c", "FormatMoney negative")
+
+local scope = MF.Util.GetMarketScope
+check(scope("CAMWOW US1 Realm 9 RP PvP") == "US-RP PvP", "Forever shard reduced to region-ruleset")
+check(scope("CAMWOW EU2 Realm 14 PvP") == "EU-PvP", "Forever PvP shard")
+check(scope("CAMWOW US1 Realm 3") == "US-Normal", "Forever shard with no ruleset is Normal")
+check(scope("Faerlina") == "Faerlina", "ordinary realm name unchanged")
+realmName = "CAMWOW US1 Realm 9 RP PvP"
+check(MF.Util.GetAuctionKey() == "US-RP PvP-Horde", "auction key on Forever")
+check(MF.Util.GetAuctionKey("Neutral") == "US-RP PvP-Neutral", "neutral auction key on Forever")
+realmName = "CAMWOW US1 Realm 12 RP PvP"
+check(MF.Util.GetAuctionKey() == "US-RP PvP-Horde", "different shard, same auction house")
 
 print(string.format("%d passed, %d failed", passes, failures))
 os.exit(failures == 0 and 0 or 1)

@@ -5,7 +5,8 @@
 --   global         settings shared by every character
 --   auctionHouses  ["<scope>-<house>"] = data for one auction house
 --                  (price history etc.). house is Alliance, Horde or
---                  Neutral; see Util.GetAuctionKey for scope.
+--                  Neutral; scope is region + ruleset, e.g. "US-RP PvP"
+--                  (see Util.GetMarketScope).
 -- MarketForcesCharDB (per character) holds character-only settings.
 --
 -- After MF:InitDatabase() runs:
