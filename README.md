@@ -71,6 +71,7 @@ game with `/dump select(4, GetBuildInfo())` and update `## Interface:` in
 | `/mf tooltip` | Turn prices on item tooltips on or off |
 | `/mf advice` | Turn Razzle's buy / auction / vendor advice on tooltips on or off |
 | `/mf razzle` | Open or close Razzle's window anywhere |
+| `/mf flip <item>` | Is it worth buying the cheap ones and relisting? (name, link or ID) |
 | `/mf dock` | Toggle Razzle opening beside the auction house |
 | `/mf status` | When this auction house was last scanned, and when the next scan is allowed |
 | `/mf modules` | List modules and whether each is on |
@@ -95,7 +96,8 @@ Modules/           feature modules (see Modules/README.md)
   Prices.lua       price history, market value, pruning
   Tooltip.lua      prices on item tooltips
   Post.lua         fills in sell prices with market value (you click Post)
-  Broker.lua       Razzle's window: greetings, bargains, price checks
+  Flip.lua         flip advice: what to buy cheap, what to relist at, profit
+  Broker.lua       Razzle's window: greetings, bargains, price checks, flips tab
 tests/             offline tests against a fake WoW API (run.lua runs them all)
 ```
 

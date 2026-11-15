@@ -3,8 +3,10 @@
 -- Razzle's window docks beside the auction house when you open it, and
 -- /mf razzle opens it anywhere (movable, position saved). Razzle greets
 -- you, says how fresh the prices are, lists bargains from the latest scan,
--- talks about items you put up for sale and looks up prices. Razzle only talks: every buy, post and cancel stays
--- with you and Blizzard's own buttons.
+-- talks about items you put up for sale and looks up prices. The Flips tab
+-- says whether an item is worth buying cheap and relisting (see Flip.lua).
+-- Razzle only talks: every buy, post and cancel stays with you and
+-- Blizzard's own buttons.
 --
 -- The logic (greetings, finding bargains, lookups) is kept apart from the
 -- frames so it can be tested offline.
@@ -176,10 +178,50 @@ local function newText(parent, template, width)
     return text
 end
 
+-- A row button that shows the item's tooltip on hover.
+local function newItemRow(parent, hint)
+    local row = CreateFrame("Button", nil, parent)
+    row:SetSize(290, 16)
+    local line = newText(row, "GameFontHighlightSmall", 290)
+    line:SetPoint("LEFT", row, "LEFT", 0, 0)
+    if line.SetWordWrap then line:SetWordWrap(false) end
+    row:SetScript("OnEnter", function(button)
+        if button.itemID and GameTooltip then
+            GameTooltip:SetOwner(button, "ANCHOR_RIGHT")
+            GameTooltip:SetItemByID(button.itemID)
+            GameTooltip:AddLine(hint, 0.5, 0.8, 1)
+            GameTooltip:Show()
+        end
+    end)
+    row:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+    return row, line
+end
+
+-- An item box: Enter calls onEnter(text); shift-clicking an item while it
+-- has focus puts the item's link in it.
+local function newItemBox(parent, name, onEnter)
+    local box = CreateFrame("EditBox", name, parent, "InputBoxTemplate")
+    box:SetSize(280, 20)
+    box:SetAutoFocus(false)
+    box:SetScript("OnEnterPressed", function(editBox)
+        onEnter(editBox:GetText())
+        editBox:ClearFocus()
+    end)
+    box:SetScript("OnEscapePressed", function(editBox) editBox:ClearFocus() end)
+    if hooksecurefunc and ChatEdit_InsertLink then
+        hooksecurefunc("ChatEdit_InsertLink", function(link)
+            if link and box:HasFocus() then box:SetText(link) end
+        end)
+    end
+    return box
+end
+
+Broker.TABS = { "Bargains", "Flips" }
+
 function Broker:CreateWindow()
     if self.frame then return self.frame end
     local f = CreateFrame("Frame", "MarketForcesRazzleFrame", UIParent, "BasicFrameTemplateWithInset")
-    f:SetSize(320, 400)
+    f:SetSize(320, 440)
     f:SetFrameStrata("HIGH")
     f:SetClampedToScreen(true)
     f:EnableMouse(true)
@@ -203,8 +245,28 @@ function Broker:CreateWindow()
     f.speech = newText(f, "GameFontHighlight", 236)
     f.speech:SetPoint("TOPLEFT", portrait, "TOPRIGHT", 8, 0)
 
-    local dealsHeader = newText(f, "GameFontNormal")
-    dealsHeader:SetPoint("TOPLEFT", portrait, "BOTTOMLEFT", 0, -40)
+    -- Tabs: one button per page; the open page's button is disabled.
+    f.tabs, f.pages = {}, {}
+    for i, title in ipairs(self.TABS) do
+        local tab = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+        tab:SetSize(90, 22)
+        if i == 1 then
+            tab:SetPoint("TOPLEFT", portrait, "BOTTOMLEFT", 0, -36)
+        else
+            tab:SetPoint("LEFT", f.tabs[i - 1], "RIGHT", 4, 0)
+        end
+        tab:SetText(title)
+        tab:SetScript("OnClick", function() Broker:ShowTab(title) end)
+        local page = CreateFrame("Frame", nil, f)
+        page:SetPoint("TOPLEFT", f, "TOPLEFT", 12, -150)
+        page:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -12, 10)
+        f.tabs[i], f.pages[title] = tab, page
+    end
+
+    -- Bargains page --------------------------------------------------------
+    local bargains = f.pages.Bargains
+    local dealsHeader = newText(bargains, "GameFontNormal")
+    dealsHeader:SetPoint("TOPLEFT", bargains, "TOPLEFT", 2, 0)
     dealsHeader:SetText("Bargains on the board")
 
     -- Each row is a button: hover shows the item's tooltip, a click opens the
@@ -212,21 +274,8 @@ function Broker:CreateWindow()
     f.dealLines, f.dealRows = {}, {}
     local previous = dealsHeader
     for i = 1, self.db.global.maxDeals do
-        local row = CreateFrame("Button", nil, f)
-        row:SetSize(290, 16)
+        local row, line = newItemRow(bargains, "Click to see it at the auction house")
         row:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, -3)
-        local line = newText(row, "GameFontHighlightSmall", 290)
-        line:SetPoint("LEFT", row, "LEFT", 0, 0)
-        if line.SetWordWrap then line:SetWordWrap(false) end
-        row:SetScript("OnEnter", function(button)
-            if button.itemID and GameTooltip then
-                GameTooltip:SetOwner(button, "ANCHOR_RIGHT")
-                GameTooltip:SetItemByID(button.itemID)
-                GameTooltip:AddLine("Click to see it at the auction house", 0.5, 0.8, 1)
-                GameTooltip:Show()
-            end
-        end)
-        row:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
         row:SetScript("OnClick", function(button)
             if button.itemID then f.speech:SetText(Broker:ShowDeal(button.itemID, button.price)) end
         end)
@@ -234,33 +283,130 @@ function Broker:CreateWindow()
         previous = row
     end
 
-    local lookupLabel = newText(f, "GameFontNormal")
-    lookupLabel:SetPoint("BOTTOMLEFT", 14, 70)
+    local lookupLabel = newText(bargains, "GameFontNormal")
+    lookupLabel:SetPoint("BOTTOMLEFT", bargains, "BOTTOMLEFT", 2, 60)
     lookupLabel:SetText("Price check")
 
-    local box = CreateFrame("EditBox", "MarketForcesRazzleLookup", f, "InputBoxTemplate")
-    box:SetSize(280, 20)
-    box:SetPoint("TOPLEFT", lookupLabel, "BOTTOMLEFT", 6, -4)
-    box:SetAutoFocus(false)
-    box:SetScript("OnEnterPressed", function(editBox)
-        f.answer:SetText(Broker:Lookup(editBox:GetText()))
-        editBox:ClearFocus()
+    f.box = newItemBox(bargains, "MarketForcesRazzleLookup", function(text)
+        f.answer:SetText(Broker:Lookup(text))
     end)
-    box:SetScript("OnEscapePressed", function(editBox) editBox:ClearFocus() end)
-    f.box = box
+    f.box:SetPoint("TOPLEFT", lookupLabel, "BOTTOMLEFT", 6, -4)
 
-    f.answer = newText(f, "GameFontHighlightSmall", 290)
-    f.answer:SetPoint("TOPLEFT", box, "BOTTOMLEFT", -6, -6)
+    f.answer = newText(bargains, "GameFontHighlightSmall", 290)
+    f.answer:SetPoint("TOPLEFT", f.box, "BOTTOMLEFT", -6, -6)
 
-    -- Shift-clicking an item while the box has focus puts its link in the box.
-    if hooksecurefunc and ChatEdit_InsertLink then
-        hooksecurefunc("ChatEdit_InsertLink", function(link)
-            if link and box:HasFocus() then box:SetText(link) end
+    -- Flips page -----------------------------------------------------------
+    local flips = f.pages.Flips
+    local flipLabel = newText(flips, "GameFontNormal")
+    flipLabel:SetPoint("TOPLEFT", flips, "TOPLEFT", 2, 0)
+    flipLabel:SetText("Flip check: type a name or shift-click an item")
+
+    f.flipBox = newItemBox(flips, "MarketForcesRazzleFlip", function(text) Broker:CheckFlip(text) end)
+    f.flipBox:SetPoint("TOPLEFT", flipLabel, "BOTTOMLEFT", 6, -4)
+
+    f.flipAnswer = newText(flips, "GameFontHighlightSmall", 290)
+    f.flipAnswer:SetPoint("TOPLEFT", f.flipBox, "BOTTOMLEFT", -6, -6)
+    f.flipAnswer:SetText("Ask me about anything you've seen on the board, boss.")
+
+    -- Opens the item in the buy view, like a bargain row. Never buys.
+    f.flipShow = CreateFrame("Button", nil, flips, "UIPanelButtonTemplate")
+    f.flipShow:SetSize(150, 22)
+    f.flipShow:SetPoint("TOPLEFT", flips, "TOPLEFT", 0, -136)
+    f.flipShow:SetText("Show me at the AH")
+    f.flipShow:SetScript("OnClick", function(button)
+        if button.itemID then f.speech:SetText(Broker:ShowDeal(button.itemID, button.price)) end
+    end)
+    f.flipShow:Hide()
+
+    local picksHeader = newText(flips, "GameFontNormal")
+    picksHeader:SetPoint("TOPLEFT", flips, "TOPLEFT", 2, -166)
+    picksHeader:SetText("Razzle's best flips")
+
+    f.flipLines, f.flipRows = {}, {}
+    previous = picksHeader
+    for i = 1, MF.Flip and MF.Flip.db.global.maxPicks or 5 do
+        local row, line = newItemRow(flips, "Click for Razzle's numbers")
+        row:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, -3)
+        row:SetScript("OnClick", function(button)
+            if button.itemID then
+                f.flipBox:SetText(Broker.ItemName(button.itemID))
+                Broker:CheckFlip(button.itemID)
+            end
         end)
+        f.flipLines[i], f.flipRows[i] = line, row
+        previous = row
     end
 
     self.frame = f
+    self:ShowTab(self.tab or "Bargains")
     return f
+end
+
+-- Shows one page of the window: "Bargains" or "Flips".
+function Broker:ShowTab(title)
+    local f = self.frame
+    if not (f and f.pages[title]) then return end
+    self.tab = title
+    for i, name in ipairs(self.TABS) do
+        if name == title then
+            f.pages[name]:Show()
+            f.tabs[i]:Disable()
+        else
+            f.pages[name]:Hide()
+            f.tabs[i]:Enable()
+        end
+    end
+    if title == "Flips" then self:RefreshFlips() end
+end
+
+-- Razzle's flip numbers for typed text, an item link or an item ID.
+function Broker:CheckFlip(text)
+    local f = self.frame
+    if not f then return end
+    local flip = MF.Flip
+    if not (flip and flip:IsEnabled()) then
+        f.flipAnswer:SetText("Flip advice is off. Turn it on with /mf enable flip.")
+        f.flipShow:Hide()
+        return
+    end
+    self.flipQuery = text
+    local answer, plan = flip:Advise(text)
+    f.flipAnswer:SetText(answer)
+    f.flipShow.itemID = plan and plan.itemID
+    f.flipShow.price = plan and plan.maxPrice
+    if plan then f.flipShow:Show() else f.flipShow:Hide() end
+end
+
+-- Fills the best-flips list (names still loading wait, like the board).
+function Broker:RefreshFlips()
+    local f = self.frame
+    if not (f and f.flipLines) then return end
+    local flip = MF.Flip
+    local picks = (flip and flip:IsEnabled()) and flip:FindFlips() or {}
+    local shown, loading = {}, 0
+    self.flipsWaitingFor = {}
+    for _, plan in ipairs(picks) do
+        if plan.label then
+            shown[#shown + 1] = plan
+        else
+            loading = loading + 1
+            self.flipsWaitingFor[plan.itemID] = true
+        end
+    end
+    for i, line in ipairs(f.flipLines) do
+        local plan = shown[i]
+        f.flipRows[i].itemID = plan and plan.itemID
+        if plan then
+            line:SetText(flip.PickLine(plan))
+        elseif i == #shown + 1 and loading > 0 then
+            line:SetText("|cff808080Looking up " .. loading .. " more...|r")
+        elseif i == 1 then
+            line:SetText(flip and flip:IsEnabled() and "No flips worth the bother right now."
+                or "Flip advice is off.")
+        else
+            line:SetText("")
+        end
+    end
 end
 
 function Broker:Refresh(extra)
@@ -268,6 +414,10 @@ function Broker:Refresh(extra)
     if not f then return end
     f.speech:SetText(self.Greeting(self:CurrentInfo(extra)))
     self:RefreshDeals()
+    -- New prices or another house: redo the item on the Flips tab too, so
+    -- its advice and AH button never describe old listings.
+    if self.flipQuery then self:CheckFlip(self.flipQuery) end
+    if self.tab == "Flips" then self:RefreshFlips() end
 end
 
 -- Fills the board. Rows whose item names are still loading are skipped
@@ -418,12 +568,18 @@ end
 -- ignored, since refilling walks the whole price history. Razzle's speech
 -- is left alone.
 function Broker:GET_ITEM_INFO_RECEIVED(_, itemID)
-    if not (self.waitingFor and itemID and self.waitingFor[itemID]) then return end
+    if not itemID then return end
+    local deal = self.waitingFor and self.waitingFor[itemID]
+    local pick = self.tab == "Flips" and self.flipsWaitingFor and self.flipsWaitingFor[itemID]
+    if not (deal or pick) then return end
     if self.namesPending or not (self.frame and self.frame:IsShown()) then return end
     self.namesPending = true
     C_Timer.After(0.2, function()
         Broker.namesPending = false
-        if Broker:IsEnabled() and Broker.frame and Broker.frame:IsShown() then Broker:RefreshDeals() end
+        if Broker:IsEnabled() and Broker.frame and Broker.frame:IsShown() then
+            Broker:RefreshDeals()
+            if Broker.tab == "Flips" then Broker:RefreshFlips() end
+        end
     end)
 end
 

@@ -9,6 +9,7 @@ the Core files and `Core\Core.lua`.
 | Prices | Built | Listen for scans and keep per item price history in `db.ah` |
 | Tooltip | Built | Show stored prices on item tooltips |
 | Post | Built | Fill in the sell price with market value; the player clicks Post |
+| Flip | Built | Flip advice: which cheap listings to buy, the relist price and the profit after the cut |
 | Broker | Built | Razzle, the goblin broker of Razzle's Dazzles: the window, greetings and advice, built on the modules above |
 
 Scan uses `C_AuctionHouse.ReplicateItems()`, the client's full "get all"
@@ -35,6 +36,20 @@ row showing the item's icon and quality colour; hover a row for the item's
 tooltip, click it to open a commodity's buy view, or search for other items, on
 the auction house's Buy tab; the player buys with Blizzard's own button) and answers price checks typed or
 shift-clicked into its box. Razzle never buys, posts or cancels anything.
+
+Flip reads the cheapest listings Prices keeps from the latest scan (a
+"ladder" of price steps, up to the first one at or above market value) and
+finds the most profitable flip: buy every step up to some price, relist the
+lot one silver under whatever listing would be left cheapest (never above
+market value, whole silver since the sell frames take no copper), and keep
+the profit after the 5% cut. Each step bought must earn at least 10c a unit
+and 15% on its cost. Razzle's window has a **Flips** tab: type a name (or
+shift-click an item) for the plan, with the deposit (Blizzard's own figure
+at the AH, otherwise estimated from the vendor price; it comes back when
+the items sell), a warning when the history is short or the listings are
+old, and a **Show me at the AH** button that opens the buy view, like a
+bargain row. Below it, Razzle's best flips (20s profit or more). Flip never
+buys or posts: each purchase and each post is the player's own click.
 
 Post hooks Blizzard's sell frames (`ItemSellFrame`, `CommoditiesSellFrame`).
 When an item goes in, it sets the price box to the market value, rounded to
