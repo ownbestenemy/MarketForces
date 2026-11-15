@@ -685,6 +685,12 @@ function Broker:AUCTION_HOUSE_CLOSED()
     end
 end
 
+-- Post put a bag item up for sale: Razzle says what was set up (after,
+-- and in place of, the sell slot's own MF_POST_ITEM_SELECTED line).
+function Broker:MF_POST_SAYS(_, line)
+    if self.frame and self.frame:IsShown() then self.frame.speech:SetText(line) end
+end
+
 function Broker:MF_POST_ITEM_SELECTED(_, itemID, suggestion, p)
     if not (self.frame and self.frame:IsShown()) then return end
     local filled = suggestion and MF.Post and MF.Post.db.global.fillPrice
@@ -747,6 +753,7 @@ function Broker:OnEnable()
     self:RegisterMessage("MF_PRICES_UPDATED")
     self:RegisterMessage("MF_AUCTION_HOUSE_CHANGED")
     self:RegisterMessage("MF_POST_ITEM_SELECTED")
+    self:RegisterMessage("MF_POST_SAYS")
     self:RegisterEvent("GET_ITEM_INFO_RECEIVED")
     self:RegisterEvent("BAG_UPDATE_DELAYED")
 end
