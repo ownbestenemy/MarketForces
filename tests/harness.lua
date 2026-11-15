@@ -178,7 +178,7 @@ C_AuctionHouse = {
     end,
     GetItemKeyInfo = function(itemKey)
         if H.itemKeyUnknown then return nil end
-        return { itemID = itemKey.itemID, isCommodity = false }
+        return { itemID = itemKey.itemID, isCommodity = H.commodities and H.commodities[itemKey.itemID] or false }
     end,
     GetNumReplicateItems = function() return #H.auctions end,
     GetReplicateItemInfo = function(index) -- 0-based like the real API
@@ -208,6 +208,10 @@ local function addSellFrames(window)
     -- Browse result -> buy view, and the search bar.
     H.selected = nil
     function window:SelectBrowseResult(result) H.selected = result end
+    window.CategoriesList = {
+        selected = "Weapons",
+        SetSelectedCategory = function(self, index) self.selected = index end,
+    }
     window.SearchBar = {
         SearchBox = { SetText = function(_, text) H.searchedFor = text end },
         StartSearch = function() H.searchStarted = true end,

@@ -96,16 +96,21 @@ Broker.RefreshDeals = realRefresh
 
 -- Clicking a row opens the item in the AH's buy view; nothing is bought.
 local replicateBefore = H.replicateCalls
-frame.dealRows[1]:Click()
-check(H.selected and H.selected.itemKey.itemID == 9002 and H.selected.minPrice == 1000,
-    "clicking a bargain opens it in the buy view")
-check(H.plain(frame.speech.text):find("Here's the Lead Band"), "Razzle points at it")
-check(H.replicateCalls == replicateBefore, "a click doesn't scan")
-H.itemKeyUnknown = true
-H.selected = nil
+H.commodities = { [2589] = true }
 frame.dealRows[2]:Click()
-check(not H.selected and H.searchedFor == "Linen Cloth" and H.searchStarted,
-    "uncached item: falls back to a name search")
+check(H.selected and H.selected.itemKey.itemID == 2589 and H.selected.minPrice == 400,
+    "clicking a commodity bargain opens its buy view")
+check(H.plain(frame.speech.text):find("Here's the Linen Cloth"), "Razzle points at it")
+check(H.replicateCalls == replicateBefore, "a click doesn't scan")
+H.selected = nil
+frame.dealRows[1]:Click()
+check(not H.selected and H.searchedFor == "Lead Band" and H.searchStarted,
+    "gear (item key unknown) gets a name search instead")
+check(AuctionHouseFrame.CategoriesList.selected == nil, "the search clears the picked category")
+H.itemKeyUnknown = true
+H.selected, H.searchedFor = nil, nil
+frame.dealRows[2]:Click()
+check(not H.selected and H.searchedFor == "Linen Cloth", "uncached commodity: name search")
 H.itemKeyUnknown = false
 
 -- Closing the AH closes the docked window.

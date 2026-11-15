@@ -312,20 +312,28 @@ function Broker:ShowDeal(itemID, price)
     if not (window and scan and scan:IsAuctionHouseOpen()) then
         return "Meet me at the auction house and I'll show you the " .. name .. "."
     end
-    -- Blizzard's own path from a browse result to the buy view: commodities
-    -- open the quantity buy frame, other items the list of their auctions.
-    if window.SelectBrowseResult and C_AuctionHouse and C_AuctionHouse.MakeItemKey then
+    -- Commodities are keyed by item ID alone, so Blizzard's own path from a
+    -- browse result opens the quantity buy frame directly. Other items' keys
+    -- carry an item level and suffix we don't know, so those get a search.
+    if window.SelectBrowseResult and C_AuctionHouse and C_AuctionHouse.MakeItemKey
+        and C_AuctionHouse.GetItemKeyInfo then
         local itemKey = C_AuctionHouse.MakeItemKey(itemID)
-        local known = not C_AuctionHouse.GetItemKeyInfo or C_AuctionHouse.GetItemKeyInfo(itemKey)
-        if known and pcall(window.SelectBrowseResult, window, { itemKey = itemKey, minPrice = price }) then
+        local info = C_AuctionHouse.GetItemKeyInfo(itemKey)
+        if info and info.isCommodity
+            and pcall(window.SelectBrowseResult, window, { itemKey = itemKey, minPrice = price }) then
             return "Here's the " .. name .. ". Have a look; if you like it, the buy button's all yours, boss."
         end
     end
-    -- Otherwise search for it by name on the Buy tab.
+    -- Otherwise search for it by name on the Buy tab, with any category the
+    -- player picked cleared so it can't hide the item.
     local bar = window.SearchBar
     if bar and bar.SearchBox and bar.StartSearch then
         if window.SetDisplayMode and AuctionHouseFrameDisplayMode and AuctionHouseFrameDisplayMode.Buy then
             window:SetDisplayMode(AuctionHouseFrameDisplayMode.Buy)
+        end
+        local categories = window.CategoriesList
+        if categories and categories.SetSelectedCategory then
+            pcall(categories.SetSelectedCategory, categories, nil, nil, nil)
         end
         bar.SearchBox:SetText(name)
         bar:StartSearch()
