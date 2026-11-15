@@ -39,8 +39,14 @@ local function itemIDFrom(itemLocation)
     end
 end
 
+local pending = {} -- sellFrame -> token of the latest selection
+
 -- Called after Blizzard's sell frame takes an item.
 function Post:OnItemSet(sellFrame, itemLocation)
+    -- Every selection invalidates any price still waiting to be filled in,
+    -- so a quick second pick can't get the first item's price.
+    pending[sellFrame] = (pending[sellFrame] or 0) + 1
+    local token = pending[sellFrame]
     if not self:IsEnabled() then return end
     local itemID = itemIDFrom(itemLocation)
     if not itemID then return end
@@ -50,6 +56,7 @@ function Post:OnItemSet(sellFrame, itemLocation)
     -- Blizzard fills in its own default price right after SetItem; set ours
     -- on the next frame so it sticks.
     C_Timer.After(0, function()
+        if pending[sellFrame] ~= token or not Post:IsEnabled() then return end
         local input = sellFrame.PriceInput
         if input and input.SetAmount and sellFrame:IsShown() then
             input:SetAmount(suggestion)
@@ -66,13 +73,13 @@ function Post:HookSellFrames()
     local any = false
     for _, key in ipairs({ "ItemSellFrame", "CommoditiesSellFrame" }) do
         local sellFrame = window[key]
-        if sellFrame and sellFrame.SetItem and not self.hooked[key] then
+        if sellFrame and sellFrame.SetItem and not self.hooked[sellFrame] then
             hooksecurefunc(sellFrame, "SetItem", function(frame, itemLocation)
                 Post:OnItemSet(frame, itemLocation)
             end)
-            self.hooked[key] = true
+            self.hooked[sellFrame] = true
         end
-        any = any or self.hooked[key] == true
+        any = any or (sellFrame ~= nil and self.hooked[sellFrame] == true)
     end
     return any
 end
@@ -99,4 +106,8 @@ end
 
 function Post:OnEnable()
     self:RegisterEvent("AUCTION_HOUSE_SHOW")
+    -- Turned on with the auction house already open: hook it now.
+    if AuctionHouseFrame and AuctionHouseFrame.IsShown and AuctionHouseFrame:IsShown() then
+        self:AUCTION_HOUSE_SHOW()
+    end
 end

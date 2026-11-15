@@ -52,6 +52,13 @@ sell:SetItem({ itemID = 2770 })
 H.runTimers()
 check(sell.PriceInput.amount == 99999, "disabled Post doesn't fill prices")
 
+-- A quick second pick before the first price lands: no stale price.
+H.slash("enable post")
+sell:SetItem({ itemID = 2770 })
+sell:SetItem({ itemID = 424242 })
+H.runTimers()
+check(sell.PriceInput.amount == 99999, "a newer selection cancels the pending price")
+
 -- The sell frames are only hooked once across AH visits.
 H.slash("enable post")
 H.closeAuctionHouse()
@@ -63,5 +70,16 @@ local original = Post.OnItemSet
 Post.OnItemSet = function(...) calls = calls + 1 return original(...) end
 sell:SetItem({ itemID = 2770 })
 check(calls == 1, "sell frame hooked once")
+
+-- Enabled while the AH is already open (and never hooked before): works now.
+H.closeAuctionHouse()
+AuctionHouseFrame = nil -- a fresh window Post hasn't hooked
+H.slash("disable post")
+H.openAuctionHouse()
+H.slash("enable post")
+local fresh = AuctionHouseFrame.CommoditiesSellFrame
+fresh:SetItem({ itemID = 2770 })
+H.runTimers()
+check(fresh.PriceInput.amount == 12500, "enabling Post at an open AH hooks the sell frames")
 
 H.finish("post")
