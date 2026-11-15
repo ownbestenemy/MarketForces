@@ -8,7 +8,7 @@ the Core files and `Core\Core.lua`.
 | Scan | Built | Query the auction house through `C_AuctionHouse` (items and commodities) and send `MF_SCAN_COMPLETE` with the results |
 | Prices | Built | Listen for scans and keep per item price history in `db.ah` |
 | Tooltip | Built | Show stored prices on item tooltips |
-| Post | Next | Suggest prices; post or cancel only when the player clicks |
+| Post | Built | Fill in the sell price with market value; the player clicks Post |
 | Broker | Built | Razzle, the goblin broker of Razzle's Dazzles: the window, greetings and advice, built on the modules above |
 
 Scan uses `C_AuctionHouse.ReplicateItems()`, the client's full "get all"
@@ -30,6 +30,12 @@ movable, with its position saved. Razzle greets you with how fresh the
 prices are, lists bargains (items whose cheapest listing is at or below 70%
 of market value, biggest discount first) and answers price checks typed or
 shift-clicked into its box. Razzle never buys, posts or cancels anything.
+
+Post hooks Blizzard's sell frames (`ItemSellFrame`, `CommoditiesSellFrame`).
+When an item goes in, it sets the price box to the market value, rounded to
+the nearest silver, one frame after Blizzard sets its default. It never calls
+a posting function: the Post click is always the player's. `/mf autofill`
+turns the fill-in off and leaves Razzle's advice.
 
 Modules never call each other directly. They send and listen for messages
 (`self:SendMessage("MF_SCAN_COMPLETE", results)`), so any one can be turned

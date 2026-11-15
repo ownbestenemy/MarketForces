@@ -18,7 +18,7 @@ Core\Slash.lua
 Modules\Scan.lua
 Modules\Prices.lua
 Modules\Tooltip.lua
-# Modules\Post.lua
+Modules\Post.lua
 Modules\Broker.lua
 
 Core\Core.lua
