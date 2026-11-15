@@ -145,6 +145,18 @@ C_Item = {
     GetItemID = function(location) return location.itemID end,
 }
 H.itemNames = { [2589] = "Linen Cloth", [2770] = "Copper Ore" }
+
+-- Bags: H.bags[bag] = { { itemID =, stackCount =, isBound = }, ... }
+H.bags = {}
+C_Container = {
+    GetContainerNumSlots = function(bag) return H.bags[bag] and #H.bags[bag] or 0 end,
+    GetContainerItemInfo = function(bag, slot) return H.bags[bag] and H.bags[bag][slot] end,
+}
+
+-- Blizzard's link paths for shift-clicks (they differ between clients).
+ChatFrameUtil = { InsertLink = function() return false end }
+function HandleModifiedItemClick() return false end
+function IsModifiedClick(action) return action == "CHATLINK" and H.shiftDown end
 ITEM_QUALITY_COLORS = { [1] = { hex = "|cffffffff" } }
 
 function H.fire(event, ...)

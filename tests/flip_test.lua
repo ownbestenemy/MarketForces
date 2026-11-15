@@ -113,8 +113,63 @@ check(frame.pages.Bargains.shown and not frame.pages.Flips.shown, "opens on the 
 frame.tabs[2]:Click()
 check(frame.pages.Flips.shown and not frame.pages.Bargains.shown and not frame.tabs[2].enabled,
     "Flips tab switches pages")
+check(H.plain(frame.flipLines[1].text) == "Nothing in your bags I can sell.", "empty bags")
+
+-- Your bags: one row per item, priced ones first by total value, bound
+-- items left out.
+H.itemNames[7777] = "Odd Rock"
+H.bags = { [0] = {
+    { itemID = 2770, stackCount = 3 },
+    { itemID = 2589, stackCount = 20 },
+    { itemID = 9002, stackCount = 1, isBound = true },
+}, [1] = {
+    { itemID = 2589, stackCount = 4 },
+    { itemID = 7777, stackCount = 1 },
+} }
+H.fire("BAG_UPDATE_DELAYED")
+check(H.plain(frame.flipLines[1].text) == "Linen Cloth x24, 1s 58c each", "bag rows: linen first")
+check(H.plain(frame.flipLines[2].text) == "Copper Ore x3, 10s each", "then copper")
+check(H.plain(frame.flipLines[3].text) == "Odd Rock x1, no price yet", "unpriced last")
+check(frame.flipLines[4].text == "", "bound items left out")
+check(not frame.pageNext.shown, "one page, no page buttons")
+frame.flipRows[1]:Click()
+check(frame.flipBox.text == "Linen Cloth" and H.plain(frame.flipAnswer.text):find("Linen Cloth: flip it"),
+    "clicking a bag item checks it")
+check(frame.flipShow.shown and frame.flipShow.itemID == 2589, "AH button offered for the flip")
+check(H.plain(frame.flipAnswer.text):find("You've got 24 in your bags: list them at 1s each.", 1, true),
+    "advice for what you hold")
+check(H.plain(Flip:Advise("Copper Ore")):find("You've got 3 in your bags: list them at 10s each.", 1, true),
+    "no flip: list at market value")
+
+-- More than a page of bag items pages through.
+for i = 1, 6 do
+    H.itemNames[8000 + i] = "Trinket " .. i
+    H.bags[1][#H.bags[1] + 1] = { itemID = 8000 + i, stackCount = 1 }
+end
+H.fire("BAG_UPDATE_DELAYED")
+check(frame.pageNext.shown and frame.pageNext.enabled and not frame.pagePrev.enabled, "page buttons appear")
+frame.pageNext:Click()
+check(H.plain(frame.flipLines[1].text) == "Trinket 4 x1, no price yet" and frame.flipLines[4].text == "",
+    "second page")
+frame.pagePrev:Click()
+check(H.plain(frame.flipLines[1].text):find("Linen Cloth"), "back to the first page")
+
+-- Shift-clicking an item into a focused box, whichever path the client uses.
+frame.flipBox.focus = true
+ChatFrameUtil.InsertLink("|cffffffff|Hitem:2770::::::::60:::::|h[Copper Ore]|h|r")
+check(frame.flipBox.text:find("item:2770", 1, true), "ChatFrameUtil.InsertLink fills the box")
+H.shiftDown = true
+HandleModifiedItemClick("|cffffffff|Hitem:2589::::::::60:::::|h[Linen Cloth]|h|r")
+check(frame.flipBox.text:find("item:2589", 1, true), "shift-click on a bag item fills the box")
+H.shiftDown = false
+frame.flipBox.focus = false
+HandleModifiedItemClick("|cffffffff|Hitem:2770::::::::60:::::|h[Copper Ore]|h|r")
+check(frame.flipBox.text:find("item:2589", 1, true), "no focus, no change")
+
+-- Best flips list.
+frame.listButtons.picks:Click()
+check(not frame.listButtons.picks.enabled and frame.listButtons.bags.enabled, "best flips list selected")
 check(H.plain(frame.flipLines[1].text) == "Lead Band  buy 10 to 1g, sell 1g 66s: +5g 77s", "best flips listed")
-check(not frame.flipShow.shown, "no AH button before a check")
 frame.flipBox:SetText("Linen Cloth")
 frame.flipBox.scripts.OnEnterPressed(frame.flipBox)
 check(H.plain(frame.flipAnswer.text):find("Buy 15 at up to 60c"), "Enter checks the flip")
@@ -135,6 +190,15 @@ frame.flipShow:Click()
 check(H.selected and H.selected.itemKey.itemID == 9002 and H.selected.minPrice == 10000,
     "Show me at the AH opens the buy view")
 check(H.replicateCalls == replicateBefore, "no scan, no buy")
+-- At the AH, clicking a bag item also opens it there.
+frame.listButtons.bags:Click()
+H.selected, H.searchedFor = nil, nil
+frame.flipRows[1]:Click()
+check(H.searchedFor == "Linen Cloth" and H.plain(frame.speech.text):find("searched the board for Linen Cloth"),
+    "clicking a bag item at the AH searches for it")
+check(H.replicateCalls == replicateBefore, "still no scan, no buy")
+frame.flipBox:SetText("Lead Band")
+frame.flipBox.scripts.OnEnterPressed(frame.flipBox)
 -- A new scan redoes the checked item: sold out now, so no flip and no button.
 H.auctions = { { itemID = 2589, count = 10, buyout = 10000 } }
 H.advance(20 * 60)

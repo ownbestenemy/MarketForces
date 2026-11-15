@@ -21,6 +21,10 @@ read_globals = {
     "AuctionHouseFrameDisplayMode",
     "C_AddOns",
     "C_AuctionHouse",
+    "C_Container",
+    "ChatFrameUtil",
+    "HandleModifiedItemClick",
+    "IsModifiedClick",
     "C_Item",
     "C_Timer",
     "ChatEdit_InsertLink",
@@ -46,8 +50,8 @@ read_globals = {
 files["tests/"] = {
     globals = {
         "AuctionFrame", "AuctionHouseFrame", "C_AuctionHouse", "C_Timer", "CreateFrame", "DEFAULT_CHAT_FRAME", "Enum",
-        "TooltipDataProcessor", "UIParent", "C_Item", "MarketForcesRazzleFrame", "hooksecurefunc",
-        "IsShiftKeyDown", "ITEM_SOULBOUND", "ITEM_QUALITY_COLORS",
+        "TooltipDataProcessor", "UIParent", "C_Item", "C_Container", "ChatFrameUtil", "HandleModifiedItemClick", "MarketForcesRazzleFrame", "hooksecurefunc",
+        "IsShiftKeyDown", "IsModifiedClick", "ITEM_SOULBOUND", "ITEM_QUALITY_COLORS",
         "GetAddOnMetadata", "GetRealmName", "MarketForcesScanButton", "UnitExists", "UnitFactionGroup", "time",
     },
 }

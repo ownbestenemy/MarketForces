@@ -96,6 +96,50 @@ function Flip:Deposit(itemID, units)
     return floor(sellPrice * 0.15 * (self.db.global.depositHours / 12) * units + 0.5)
 end
 
+-- Bag slots read: the backpack, four bags and the reagent bag where there is one.
+local BAGS = { 0, 1, 2, 3, 4, 5 }
+
+local function slotInfo(bag, slot)
+    if C_Container and C_Container.GetContainerItemInfo then
+        return C_Container.GetContainerItemInfo(bag, slot)
+    end
+end
+
+-- Sellable items in your bags, one entry per item: { itemID, count },
+-- bound items left out (they can't go on the auction house).
+function Flip.BagItems()
+    local byID, items = {}, {}
+    if not (C_Container and C_Container.GetContainerNumSlots) then return items end
+    for _, bag in ipairs(BAGS) do
+        for slot = 1, C_Container.GetContainerNumSlots(bag) or 0 do
+            local info = slotInfo(bag, slot)
+            if info and info.itemID and not info.isBound then
+                local item = byID[info.itemID]
+                if not item then
+                    item = { itemID = info.itemID, count = 0 }
+                    byID[info.itemID] = item
+                    items[#items + 1] = item
+                end
+                item.count = item.count + (info.stackCount or 1)
+            end
+        end
+    end
+    return items
+end
+
+-- How many of an item are in your bags (bound copies included).
+function Flip.CountInBags(itemID)
+    if not (C_Container and C_Container.GetContainerNumSlots) then return 0 end
+    local count = 0
+    for _, bag in ipairs(BAGS) do
+        for slot = 1, C_Container.GetContainerNumSlots(bag) or 0 do
+            local info = slotInfo(bag, slot)
+            if info and info.itemID == itemID then count = count + (info.stackCount or 1) end
+        end
+    end
+    return count
+end
+
 -- Item ID from a link, an ID, or a name. Names match items in the client's
 -- cache first, then items seen at this auction house (exact name first,
 -- then the shortest name containing the text).
@@ -153,41 +197,52 @@ function Flip:Advise(text)
     end
     local plan, why = Flip.Analyze(p, self.db.global)
     local money = Util.FormatMoney
+    local lines = {}
     if not plan then
         if why == "nomarket" then
-            return name .. ": I've got no steady price for it yet. A scan or two more and I'll know."
+            lines[1] = name .. ": I've got no steady price for it yet. A scan or two more and I'll know."
         elseif why == "nolistings" and (p.quantity or 0) > 0 then
-            return name .. ": my notes on its listings are from before I learned flipping. "
+            lines[1] = name .. ": my notes on its listings are from before I learned flipping. "
                 .. "Run a fresh scan and ask again."
         elseif why == "nolistings" then
-            return name .. ": nobody's selling any right now. Nothing to flip, boss."
+            lines[1] = name .. ": nobody's selling any right now. Nothing to flip, boss."
         elseif why == "nothingcheap" then
-            return string.format("%s: cheapest is %s and it's worth about %s. No flip here, boss.",
+            lines[1] = string.format("%s: cheapest is %s and it's worth about %s. No flip here, boss.",
                 name, money(p.ladder[1][1]), money(p.market))
+        else
+            lines[1] = string.format("%s: cheapest is %s, worth about %s. After the house's cut the margin's "
+                .. "too thin to bother.", name, money(p.ladder[1][1]), money(p.market))
         end
-        return string.format("%s: cheapest is %s, worth about %s. After the house's cut the margin's "
-            .. "too thin to bother.", name, money(p.ladder[1][1]), money(p.market))
+    else
+        plan.itemID = itemID
+        lines = {
+            string.format("%s: flip it, boss!", name),
+            string.format("Buy %d at up to %s each (%s in all).", plan.units, money(plan.maxPrice),
+                money(plan.cost)),
+            string.format("Relist at %s each (worth about %s).", money(plan.resale), money(p.market)),
+            string.format("Profit about %s after the house's 5%% cut.", money(plan.profit)),
+        }
+        if plan.units > (p.quantity or 0) * 0.5 and plan.units >= 20 then
+            lines[#lines + 1] = string.format("That's %d of the %d listed, so it may take a while to sell.",
+                plan.units, p.quantity)
+        end
+        local deposit = self:Deposit(itemID, plan.units)
+        if deposit then
+            lines[#lines + 1] = "Deposit about " .. money(deposit) .. ", lost only if they don't sell."
+        end
     end
-    plan.itemID = itemID
-    local lines = {
-        string.format("%s: flip it, boss!", name),
-        string.format("Buy %d at up to %s each (%s in all).", plan.units, money(plan.maxPrice), money(plan.cost)),
-        string.format("Relist at %s each (worth about %s).", money(plan.resale), money(p.market)),
-        string.format("Profit about %s after the house's 5%% cut.", money(plan.profit)),
-    }
-    if plan.units > (p.quantity or 0) * 0.5 and plan.units >= 20 then
-        lines[#lines + 1] = string.format("That's %d of the %d listed, so it may take a while to sell.",
-            plan.units, p.quantity)
+    -- Your own stock: the flip's relist price, or market value like Post.
+    local owned = Flip.CountInBags(itemID)
+    if owned > 0 and p.market then
+        local ask = plan and plan.resale or (MF.Post and MF.Post:Suggest(itemID))
+            or math.max(SILVER, floor(p.market / SILVER + 0.5) * SILVER)
+        lines[#lines + 1] = string.format("You've got %d in your bags: list them at %s each.", owned, money(ask))
     end
-    local deposit = self:Deposit(itemID, plan.units)
-    if deposit then
-        lines[#lines + 1] = "Deposit about " .. money(deposit) .. ", lost only if they don't sell."
-    end
-    if p.days < 3 then
+    if p.market and p.days < 3 then
         lines[#lines + 1] = string.format("Careful: only %d %s of history on this one.", p.days,
             p.days == 1 and "day" or "days")
     end
-    if p.lastSeen and time() - p.lastSeen > HOUR then
+    if plan and p.lastSeen and time() - p.lastSeen > HOUR then
         lines[#lines + 1] = "These listings are " .. ago(time() - p.lastSeen) .. " old; some may be gone."
     end
     return table.concat(lines, "\n"), plan
