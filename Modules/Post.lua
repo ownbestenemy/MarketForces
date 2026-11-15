@@ -46,7 +46,8 @@ local function itemIDFrom(itemLocation)
     end
 end
 
-local pending = {} -- sellFrame -> token of the latest selection
+local pending = {}  -- sellFrame -> token of the latest selection
+local selected = {} -- sellFrame -> item ID of the latest selection
 
 -- Called after Blizzard's sell frame takes an item.
 function Post:OnItemSet(sellFrame, itemLocation)
@@ -56,6 +57,7 @@ function Post:OnItemSet(sellFrame, itemLocation)
     local token = pending[sellFrame]
     if not self:IsEnabled() then return end
     local itemID = itemIDFrom(itemLocation)
+    selected[sellFrame] = itemID
     if not itemID then return end
     local suggestion, p = self:Suggest(itemID)
     self:SendMessage("MF_POST_ITEM_SELECTED", itemID, suggestion, p)
@@ -172,6 +174,10 @@ function Post:SellFromBags(link, location)
     -- CVar; set it first so it sticks even if the dropdown can't be set.
     local duration = self.db.global.duration
     if SetCVar then pcall(SetCVar, "auctionHouseDurationDropdown", duration) end
+    local before = {}
+    for _, key in ipairs({ "CommoditiesSellFrame", "ItemSellFrame" }) do
+        if window[key] then before[window[key]] = pending[window[key]] end
+    end
     if not pcall(window.SetPostItem, window, location) then
         return "I couldn't open the sell slot. Drag " .. name .. " in yourself, boss."
     end
@@ -180,13 +186,19 @@ function Post:SellFromBags(link, location)
     local quantity, capped = Post.SuggestQuantity(owned, p and p.quantity, tonumber(stackSize))
     -- The sell frame now holding this item, and its selection token, so a
     -- different pick before the next frame doesn't get this item's numbers.
+    -- Blizzard can decline without an error (item data not loaded yet, a
+    -- multisell running), so only a fresh selection of this item counts.
     local target, token
     for _, key in ipairs({ "CommoditiesSellFrame", "ItemSellFrame" }) do
         local sellFrame = window[key]
-        if sellFrame and sellFrame.IsShown and sellFrame:IsShown() then
+        if sellFrame and sellFrame.IsShown and sellFrame:IsShown() and pending[sellFrame] ~= before[sellFrame]
+            and selected[sellFrame] == itemID then
             target, token = sellFrame, pending[sellFrame]
             break
         end
+    end
+    if not target then
+        return "The auction house didn't take " .. name .. " just now. Give it a moment and try again, boss."
     end
     -- After Blizzard (and OnItemSet's price) settle, on the next frame.
     C_Timer.After(0, function()

@@ -111,6 +111,17 @@ HandleModifiedItemClick(linen, ItemLocation:CreateFromBagAndSlot(0, 2))
 check(H.plain(razzle.speech.text):find("Drag Linen Cloth in yourself"), "fallback when the slot can't be set")
 H.setPostItemFails = false
 
+-- Declined quietly (e.g. item data not loaded): no claims, old item untouched.
+HandleModifiedItemClick(linen, ItemLocation:CreateFromBagAndSlot(0, 2))
+H.runTimers()
+sell.QuantityInput.quantity = 7
+H.setPostItemDeclines = true
+HandleModifiedItemClick("|cffffffff|Hitem:2770::::::::60:::::|h[Copper Ore]|h|r")
+H.runTimers()
+check(sell.QuantityInput.quantity == 7, "declined pick doesn't change the item in the slot")
+check(H.plain(razzle.speech.text):find("didn't take Copper Ore just now"), "Razzle says it didn't take")
+H.setPostItemDeclines = false
+
 -- Away from the AH: nothing.
 H.closeAuctionHouse()
 H.postItemSet = nil

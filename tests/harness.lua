@@ -231,6 +231,7 @@ local function addSellFrames(window)
     -- sell frame hides, like switching display modes.
     function window:SetPostItem(location)
         if H.setPostItemFails then error("no") end
+        if H.setPostItemDeclines then return end
         local info = C_Container.GetContainerItemInfo(location.bag, location.slot)
         local commodity = H.commodities and H.commodities[info.itemID]
         local show = commodity and self.CommoditiesSellFrame or self.ItemSellFrame
