@@ -135,6 +135,21 @@ frame.flipShow:Click()
 check(H.selected and H.selected.itemKey.itemID == 9002 and H.selected.minPrice == 10000,
     "Show me at the AH opens the buy view")
 check(H.replicateCalls == replicateBefore, "no scan, no buy")
+-- A new scan redoes the checked item: sold out now, so no flip and no button.
+H.auctions = { { itemID = 2589, count = 10, buyout = 10000 } }
+H.advance(20 * 60)
+H.slash("scan")
+H.fire("REPLICATE_ITEM_LIST_UPDATE")
+H.runTimers()
+check(H.plain(frame.flipAnswer.text):find("nobody's selling"), "checked item redone after a scan")
+check(not frame.flipShow.shown, "AH button gone once the flip is gone")
+-- Another house: the item's advice comes from that house's prices.
+H.closeAuctionHouse()
+H.npcFaction = "Neutral"
+H.openAuctionHouse()
+check(H.plain(frame.flipAnswer.text):find("Never seen Lead Band at this house"), "redone for the new house")
+check(not frame.flipShow.shown, "no AH button from the other house")
+H.npcFaction = nil
 frame.tabs[1]:Click()
 check(frame.pages.Bargains.shown and not frame.pages.Flips.shown, "back to Bargains")
 H.closeAuctionHouse()

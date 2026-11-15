@@ -369,6 +369,7 @@ function Broker:CheckFlip(text)
         f.flipShow:Hide()
         return
     end
+    self.flipQuery = text
     local answer, plan = flip:Advise(text)
     f.flipAnswer:SetText(answer)
     f.flipShow.itemID = plan and plan.itemID
@@ -413,6 +414,9 @@ function Broker:Refresh(extra)
     if not f then return end
     f.speech:SetText(self.Greeting(self:CurrentInfo(extra)))
     self:RefreshDeals()
+    -- New prices or another house: redo the item on the Flips tab too, so
+    -- its advice and AH button never describe old listings.
+    if self.flipQuery then self:CheckFlip(self.flipQuery) end
     if self.tab == "Flips" then self:RefreshFlips() end
 end
 
