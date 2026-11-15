@@ -127,14 +127,15 @@ function Flip.BagItems()
     return items
 end
 
--- How many of an item are in your bags (bound copies included).
+-- How many copies of an item in your bags could go on the auction house
+-- (bound copies left out).
 function Flip.CountInBags(itemID)
     if not (C_Container and C_Container.GetContainerNumSlots) then return 0 end
     local count = 0
     for _, bag in ipairs(BAGS) do
         for slot = 1, C_Container.GetContainerNumSlots(bag) or 0 do
             local info = slotInfo(bag, slot)
-            if info and info.itemID == itemID then count = count + (info.stackCount or 1) end
+            if info and info.itemID == itemID and not info.isBound then count = count + (info.stackCount or 1) end
         end
     end
     return count

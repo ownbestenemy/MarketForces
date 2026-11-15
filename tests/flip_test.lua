@@ -138,6 +138,22 @@ check(frame.flipBox.text == "Linen Cloth" and H.plain(frame.flipAnswer.text):fin
 check(frame.flipShow.shown and frame.flipShow.itemID == 2589, "AH button offered for the flip")
 check(H.plain(frame.flipAnswer.text):find("You've got 24 in your bags: list them at 1s each.", 1, true),
     "advice for what you hold")
+-- Selling some: the checked item's advice follows the bags.
+H.bags[0][2].stackCount = 5
+H.fire("BAG_UPDATE_DELAYED")
+check(H.plain(frame.flipAnswer.text):find("You've got 9 in your bags", 1, true), "advice follows bag changes")
+H.bags[0][2].stackCount = 20
+H.fire("BAG_UPDATE_DELAYED")
+-- Bound copies don't count; all bound means no listing advice.
+check(not H.plain(Flip:Advise("Lead Band")):find("You've got", 1, true), "bound copies aren't listable")
+-- Selling some: the checked item's advice follows the bags.
+H.bags[0][2].stackCount = 5
+H.fire("BAG_UPDATE_DELAYED")
+check(H.plain(frame.flipAnswer.text):find("You've got 9 in your bags", 1, true), "advice follows bag changes")
+H.bags[0][2].stackCount = 20
+H.fire("BAG_UPDATE_DELAYED")
+-- Bound copies don't count; all bound means no listing advice.
+check(not H.plain(Flip:Advise("Lead Band")):find("You've got", 1, true), "bound copies aren't listable")
 check(H.plain(Flip:Advise("Copper Ore")):find("You've got 3 in your bags: list them at 10s each.", 1, true),
     "no flip: list at market value")
 

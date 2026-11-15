@@ -751,11 +751,12 @@ function Broker:OnEnable()
     self:RegisterEvent("BAG_UPDATE_DELAYED")
 end
 
--- Your bags changed: refresh the bag list if it's showing.
+-- Your bags changed: redo the checked item (its advice counts your copies)
+-- and the bag list if it's showing.
 function Broker:BAG_UPDATE_DELAYED()
-    if self.frame and self.frame:IsShown() and self.tab == "Flips" and (self.flipList or "bags") == "bags" then
-        self:RefreshFlips()
-    end
+    if not (self.frame and self.frame:IsShown()) then return end
+    if self.flipQuery then self:CheckFlip(self.flipQuery) end
+    if self.tab == "Flips" and (self.flipList or "bags") == "bags" then self:RefreshFlips() end
 end
 
 function Broker:OnDisable()
