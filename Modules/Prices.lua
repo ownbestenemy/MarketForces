@@ -6,9 +6,12 @@
 -- Two numbers per item:
 --   market     smoothed market value. Each scan gives a "scan value": the
 --              average price of the cheapest 30% of units listed, so a few
---              silly high listings can't drag it up. Scan values are kept per
---              day, and market blends the days, with recent days counting
---              more (a day's weight halves every 7 days).
+--              silly high listings can't drag it up. Each day keeps its
+--              lowest scan value, and market blends the days. Recent days
+--              count more (a day's weight halves every 7 days), and so do
+--              cheap days: a day's weight shrinks with the square of how far
+--              it sits above the cheapest day, so a run of high asking
+--              prices can't outweigh a realistic low price.
 --   minBuyout  the cheapest buyout per unit in the latest scan: what you'd be
 --              undercutting right now.
 --
@@ -17,7 +20,9 @@
 --
 -- Saved per auction house in db.ah.items[itemID]:
 --   l = minBuyout of the latest scan, q = units listed, t = time last seen,
---   d = { [dayNumber] = { sum of that day's scan values, number of scans } }
+--   d = { [dayNumber] = { sum of that day's scan values, number of scans,
+--                         lowest scan value that day } }
+--   (Entries saved before the third field existed use the day's average.)
 local _, MF = ...
 
 local Util = MF.Util
@@ -27,6 +32,7 @@ local Prices = MF:NewModule("Prices", {
         historyDays = 30,  -- days of history kept
         halfLifeDays = 7,  -- a day's weight in market value halves this often
         cheapShare = 0.3,  -- share of the cheapest units a scan value averages
+        lowWeight = 2,     -- how hard market value leans toward the cheapest days (0 = not at all)
     },
     ah = {
         items = {},
@@ -65,19 +71,35 @@ function Prices.ScanValue(listings, share)
     return floor(sum / units + 0.5)
 end
 
--- Blends daily values: weight halves every halfLife days back from today.
-local function blend(days, today, halfLife)
+-- A day's value: its lowest scan value, or its average for older entries.
+local function dayValue(entry)
+    return entry[3] or (entry[1] / entry[2])
+end
+
+-- Blends daily values. A day's weight halves every halfLife days back from
+-- today, and is multiplied by (cheapest day's value / its value) ^ lowWeight,
+-- so days far above the cheapest barely count.
+local function blend(days, today, halfLife, lowWeight)
+    local lowest
+    for _, entry in pairs(days) do
+        local v = dayValue(entry)
+        if v > 0 and (not lowest or v < lowest) then lowest = v end
+    end
     local weighted, weights = 0, 0
     for day, entry in pairs(days) do
-        local age = today - day
-        if age < 0 then age = 0 end
-        local w = 0.5 ^ (age / halfLife)
-        weighted = weighted + (entry[1] / entry[2]) * w
-        weights = weights + w
+        local v = dayValue(entry)
+        if v > 0 then
+            local age = today - day
+            if age < 0 then age = 0 end
+            local w = 0.5 ^ (age / halfLife) * (lowest / v) ^ (lowWeight or 0)
+            weighted = weighted + v * w
+            weights = weights + w
+        end
     end
     if weights == 0 then return nil end
     return floor(weighted / weights + 0.5)
 end
+Prices.Blend = blend
 
 -- Records a scan snapshot (from MF_SCAN_COMPLETE) into history.
 function Prices:RecordSnapshot(snapshot)
@@ -100,8 +122,9 @@ function Prices:RecordSnapshot(snapshot)
             if day then
                 day[1] = day[1] + value
                 day[2] = day[2] + 1
+                day[3] = math.min(day[3] or (day[1] - value) / (day[2] - 1), value)
             else
-                entry.d[today] = { value, 1 }
+                entry.d[today] = { value, 1, value }
             end
             recorded = recorded + 1
         end
@@ -171,7 +194,7 @@ function Prices:GetPrice(itemID, key)
     local days = 0
     for _ in pairs(entry.d) do days = days + 1 end
     return {
-        market = blend(entry.d, dayNumber(time()), self.db.global.halfLifeDays),
+        market = blend(entry.d, dayNumber(time()), self.db.global.halfLifeDays, self.db.global.lowWeight),
         minBuyout = entry.l,
         quantity = entry.q or 0,
         lastSeen = entry.t,

@@ -18,9 +18,11 @@ doesn't stall. Items are grouped by item ID; random-suffix variants share one
 entry for now.
 
 Prices keeps two numbers per item. **Market value** averages the cheapest
-30% of units in each scan (so troll listings don't count), keeps one value
-per day, and blends the days with recent ones weighted more (a day's weight
-halves every 7 days). **Cheapest now** is the lowest buyout per unit in the
+30% of units in each scan (so troll listings don't count), keeps each
+day's lowest scan value, and blends the days with recent ones weighted more
+(a day's weight halves every 7 days) and cheap ones weighted more (a day's
+weight is multiplied by (cheapest day / this day)^2, so a run of high asks
+can't outweigh a realistic low price; `lowWeight` sets the power). **Cheapest now** is the lowest buyout per unit in the
 latest scan. Other modules read both with `MF.Prices:GetPrice(itemID)`.
 History older than 30 days is pruned.
 
