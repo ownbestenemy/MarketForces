@@ -45,7 +45,7 @@ files["tests/"] = {
     globals = {
         "AuctionFrame", "AuctionHouseFrame", "C_AuctionHouse", "C_Timer", "CreateFrame", "DEFAULT_CHAT_FRAME", "Enum",
         "TooltipDataProcessor", "UIParent", "C_Item", "MarketForcesRazzleFrame", "hooksecurefunc",
-        "IsShiftKeyDown",
+        "IsShiftKeyDown", "ITEM_SOULBOUND",
         "GetAddOnMetadata", "GetRealmName", "MarketForcesScanButton", "UnitExists", "UnitFactionGroup", "time",
     },
 }

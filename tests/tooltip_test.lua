@@ -47,12 +47,31 @@ check(says({ market = 1000, minBuyout = 1000 }, 960) == "Vendor it (the auction 
 check(says({ market = 1000, minBuyout = 1000 }, 0) == "Auction it (about 9s 50c after the AH cut)", "auction it")
 check(says(nil, 25) == "Vendor it (no auction prices yet)", "vendor with no AH data")
 check(says(nil, 0) == nil, "nothing to say about an unsellable, unscanned item")
+local function saysBound(p, vendor)
+    local v, why = A(p, vendor, 0.7, true)
+    return v and H.plain(v .. " (" .. why .. ")")
+end
+check(saysBound({ market = 1000, minBuyout = 1000 }, 50) == "Vendor it (yours is bound, so it can't be auctioned)",
+    "bound copy: vendor, never auction")
+check(saysBound({ market = 1000, minBuyout = 300 }, 0) == nil, "bound copy: no buy or auction advice")
 
 -- Vendor-only item gets just the advice line.
 H.slash("enable prices")
 H.vendorPrices = { [7777] = 30 }
 local vendorOnly = H.showItemTooltip(7777)
 check(#vendorOnly == 1 and vendorOnly[1] == "Razzle says = Vendor it (no auction prices yet)", "vendor-only tooltip")
+
+-- A bound copy of a scanned item never hears "Auction it".
+local boundLines = H.showItemTooltip(2589, { bound = true })
+check(#boundLines == 3, "bound copy: prices shown, no auction advice (tooltip data)")
+H.vendorPrices[2589] = 5
+boundLines = H.showItemTooltip(2589, { bound = true })
+check(boundLines[4] == "Razzle says = Vendor it (yours is bound, so it can't be auctioned)",
+    "bound copy with vendor price: vendor it")
+boundLines = H.showItemTooltip(2589, { boundText = true })
+check(boundLines[4] == "Razzle says = Vendor it (yours is bound, so it can't be auctioned)",
+    "bound copy found from the tooltip's text lines")
+H.vendorPrices[2589] = nil
 
 -- /mf advice turns the line off.
 H.slash("advice")

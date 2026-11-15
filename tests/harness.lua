@@ -224,12 +224,24 @@ local postCalls = {}
 TooltipDataProcessor = {
     AddTooltipPostCall = function(kind, fn) postCalls[#postCalls + 1] = { kind = kind, fn = fn } end,
 }
-function H.showItemTooltip(itemID)
+ITEM_SOULBOUND = "Soulbound"
+-- opts.bound adds a "Soulbound" line to the tooltip data; opts.boundText
+-- puts it in the tooltip's own text lines instead (older tooltip style).
+function H.showItemTooltip(itemID, opts)
+    opts = opts or {}
     local tip = { lines = {} }
+    local data = { id = itemID, lines = { { leftText = "Item" } } }
+    if opts.bound then data.lines[2] = { leftText = ITEM_SOULBOUND } end
+    if opts.boundText then
+        function tip:GetName() return "FakeTooltip" end
+        function tip:NumLines() return 2 end
+        _G.FakeTooltipTextLeft1 = { GetText = function() return "Item" end }
+        _G.FakeTooltipTextLeft2 = { GetText = function() return ITEM_SOULBOUND end }
+    end
     function tip:AddDoubleLine(left, right) self.lines[#self.lines + 1] = H.plain(left) .. " = " .. H.plain(right) end
     function tip:Show() end
     for _, call in ipairs(postCalls) do
-        if call.kind == Enum.TooltipDataType.Item then call.fn(tip, { id = itemID }) end
+        if call.kind == Enum.TooltipDataType.Item then call.fn(tip, data) end
     end
     return tip.lines
 end

@@ -41,9 +41,15 @@ end
 --   p           price table from Prices:GetPrice (may be nil)
 --   vendor      vendor sell price per unit
 --   dealRatio   a listing this far under market value counts as a bargain
-function Tooltip.Advice(p, vendor, dealRatio)
+--   bound       true when the copy under the mouse is soulbound or account
+--               bound, so it can't go on the auction house
+function Tooltip.Advice(p, vendor, dealRatio, bound)
     vendor = vendor or 0
     dealRatio = dealRatio or 0.7
+    if bound then
+        if vendor > 0 then return "Vendor it", "yours is bound, so it can't be auctioned" end
+        return nil
+    end
     local market = p and p.market
     local cheapest = p and p.minBuyout
     if cheapest and vendor > 0 and cheapest < vendor then
@@ -67,7 +73,8 @@ end
 
 -- The lines Razzle adds for an item: list of { left, right }. Empty when
 -- there's nothing to say. Kept separate from the tooltip so it's testable.
-function Tooltip:LinesFor(itemID)
+-- bound: the tooltip's copy of the item is bound (see IsBoundTooltip).
+function Tooltip:LinesFor(itemID, bound)
     local prices = MF.Prices
     if not (prices and prices:IsEnabled() and itemID) then return {} end
     local p = prices:GetPrice(itemID)
@@ -86,7 +93,7 @@ function Tooltip:LinesFor(itemID)
     if self.db.global.advice then
         local broker = MF.Broker
         local ratio = broker and broker.db and broker.db.global.dealRatio or 0.7
-        local verdict, why = Tooltip.Advice(p, Tooltip.VendorPrice(itemID), ratio)
+        local verdict, why = Tooltip.Advice(p, Tooltip.VendorPrice(itemID), ratio, bound)
         if verdict then
             lines[#lines + 1] = { "Razzle says", verdict .. " (" .. why .. ")" }
         end
@@ -94,15 +101,49 @@ function Tooltip:LinesFor(itemID)
     return lines
 end
 
-function Tooltip:Decorate(tooltip, itemID)
+function Tooltip:Decorate(tooltip, itemID, data)
     if not (self:IsEnabled() and self.db.global.show) then return end
-    local lines = self:LinesFor(itemID)
+    local lines = self:LinesFor(itemID, Tooltip.IsBoundTooltip(tooltip, data))
     if #lines == 0 then return end
     for _, line in ipairs(lines) do
         tooltip:AddDoubleLine(line[1], line[2],
             LABEL_COLOR[1], LABEL_COLOR[2], LABEL_COLOR[3], VALUE_COLOR[1], VALUE_COLOR[2], VALUE_COLOR[3])
     end
     tooltip:Show()
+end
+
+-- Tooltip text that means this copy can't be traded. Prices are kept by
+-- item ID, so a bound copy still gets the unbound copies' prices; the
+-- advice must not tell the player to auction it.
+local function boundTexts()
+    local texts = {}
+    for _, name in ipairs({ "ITEM_SOULBOUND", "ITEM_ACCOUNTBOUND", "ITEM_BNETACCOUNTBOUND" }) do
+        local text = _G[name]
+        if type(text) == "string" then texts[text] = true end
+    end
+    if not next(texts) then texts["Soulbound"] = true end
+    return texts
+end
+
+-- True when the item on this tooltip is bound. Reads the tooltip data's lines
+-- (modern client) and the tooltip's own text lines (any client).
+function Tooltip.IsBoundTooltip(tooltip, data)
+    local texts = boundTexts()
+    if data and type(data.lines) == "table" then
+        for _, line in ipairs(data.lines) do
+            if line.leftText and texts[line.leftText] then return true end
+        end
+    end
+    local name = tooltip and tooltip.GetName and tooltip:GetName()
+    local count = tooltip and tooltip.NumLines and tooltip:NumLines() or 0
+    if name then
+        for i = 1, count do
+            local fontString = _G[name .. "TextLeft" .. i]
+            local text = fontString and fontString.GetText and fontString:GetText()
+            if text and texts[text] then return true end
+        end
+    end
+    return false
 end
 
 local function itemIDFromTooltip(tooltip, data)
@@ -120,7 +161,7 @@ function Tooltip:Hook()
     self.hooked = true
     if TooltipDataProcessor and TooltipDataProcessor.AddTooltipPostCall and Enum and Enum.TooltipDataType then
         TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Item, function(tooltip, data)
-            Tooltip:Decorate(tooltip, itemIDFromTooltip(tooltip, data))
+            Tooltip:Decorate(tooltip, itemIDFromTooltip(tooltip, data), data)
         end)
     elseif GameTooltip and GameTooltip.HookScript then
         local function onSetItem(tooltip) Tooltip:Decorate(tooltip, itemIDFromTooltip(tooltip)) end
