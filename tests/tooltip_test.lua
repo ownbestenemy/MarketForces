@@ -20,17 +20,43 @@ local lines = H.showItemTooltip(2589)
 check(lines[1] == "Razzle's market value = 2s 50c", "market value line")
 check(lines[2] == "Cheapest listed = 2s 50c (10)", "cheapest listing line")
 check(lines[3] == "Last scanned = 2h ago", "last scanned line")
+check(lines[4] == "Razzle says = Auction it (about 2s 37c after the AH cut)", "advice line")
 check(#H.showItemTooltip(424242) == 0, "unscanned item gets no lines")
 
 H.slash("tooltip")
 check(#H.showItemTooltip(2589) == 0, "/mf tooltip turns lines off")
 H.slash("tooltip")
-check(#H.showItemTooltip(2589) == 3, "/mf tooltip turns them back on")
+check(#H.showItemTooltip(2589) == 4, "/mf tooltip turns them back on")
 
 H.slash("disable tooltip")
 check(#H.showItemTooltip(2589) == 0, "disabled module adds nothing")
 H.slash("enable tooltip")
 H.slash("disable prices")
 check(#H.showItemTooltip(2589) == 0, "no lines when Prices is off")
+
+-- Razzle's advice, case by case.
+local A = Tooltip.Advice
+local function says(p, vendor)
+    local v, why = A(p, vendor, 0.7)
+    return v and H.plain(v .. " (" .. why .. ")")
+end
+check(says({ market = 1000, minBuyout = 600 }, 0) == "Buy it (40% under market)", "buy a bargain")
+check(says({ market = 1000, minBuyout = 900 }, 950) == "Buy it (listed below vendor price)", "buy to vendor")
+check(says({ market = 1000, minBuyout = 1000 }, 960) == "Vendor it (the auction house pays no better)",
+    "vendor when the AH cut eats the margin")
+check(says({ market = 1000, minBuyout = 1000 }, 0) == "Auction it (about 9s 50c after the AH cut)", "auction it")
+check(says(nil, 25) == "Vendor it (no auction prices yet)", "vendor with no AH data")
+check(says(nil, 0) == nil, "nothing to say about an unsellable, unscanned item")
+
+-- Vendor-only item gets just the advice line.
+H.slash("enable prices")
+H.vendorPrices = { [7777] = 30 }
+local vendorOnly = H.showItemTooltip(7777)
+check(#vendorOnly == 1 and vendorOnly[1] == "Razzle says = Vendor it (no auction prices yet)", "vendor-only tooltip")
+
+-- /mf advice turns the line off.
+H.slash("advice")
+check(#H.showItemTooltip(2589) == 3 and #H.showItemTooltip(7777) == 0, "/mf advice hides the advice")
+H.slash("advice")
 
 H.finish("tooltip")

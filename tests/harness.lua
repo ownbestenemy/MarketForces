@@ -131,7 +131,12 @@ function hooksecurefunc(target, method, hook)
     end
 end
 C_Item = {
-    GetItemInfo = function(itemID) return H.itemNames and H.itemNames[itemID] end,
+    GetItemInfo = function(itemID)
+        local name = H.itemNames and H.itemNames[itemID]
+        local sell = H.vendorPrices and H.vendorPrices[itemID]
+        if not name and not sell then return nil end
+        return name, nil, 1, 1, 1, "", "", 1, "", 0, sell or 0
+    end,
     GetItemID = function(location) return location.itemID end,
 }
 H.itemNames = { [2589] = "Linen Cloth", [2770] = "Copper Ore" }
