@@ -76,6 +76,31 @@ check(not frame.shown, "no docking after /mf dock")
 H.closeAuctionHouse()
 H.slash("dock")
 
+-- Switching to a goblin AH shows that house's numbers, not the faction's.
+H.npcFaction = "Neutral"
+H.openAuctionHouse()
+check(Broker.docked and frame.speech.text:find("haven't scouted"), "neutral AH shows its own (empty) data")
+check(H.plain(frame.dealLines[1].text) == "Nothing cheap enough to shout about.",
+    "no faction bargains at the goblin AH")
+H.closeAuctionHouse()
+H.npcFaction = nil
+H.openAuctionHouse()
+check(H.plain(frame.dealLines[1].text):find("Linen Cloth"), "faction bargains back at the faction AH")
+H.closeAuctionHouse()
+
+-- A late-loading AH window closed before it appears: no stray window.
+AuctionHouseFrame = nil
+H.windowLoadsLate = true
+H.windowName = "LateAuctionFrame"
+H.fire("AUCTION_HOUSE_SHOW")
+H.fire("AUCTION_HOUSE_CLOSED")
+AuctionHouseFrame = CreateFrame("Frame", "AuctionHouseFrame")
+AuctionHouseFrame:Hide()
+H.advance(1)
+check(not frame.shown, "pending dock cancelled when the AH closes")
+H.windowName = "AuctionHouseFrame"
+H.windowLoadsLate = false
+
 -- Module off.
 H.slash("disable broker")
 H.clearChat()

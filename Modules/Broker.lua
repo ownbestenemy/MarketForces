@@ -251,10 +251,15 @@ end
 -- Events -----------------------------------------------------------------------------
 
 function Broker:AUCTION_HOUSE_SHOW()
+    self.ahOpen = true
     if not self.db.global.dockAtAuctionHouse then return end
-    -- The window may finish loading a moment after the event.
+    -- The window may finish loading a moment after the event. Each open gets
+    -- a token; closing the AH or turning Broker off invalidates it.
+    self.dockToken = (self.dockToken or 0) + 1
+    local token = self.dockToken
     local tries = 0
     local function dock()
+        if token ~= Broker.dockToken or not Broker.ahOpen or not Broker:IsEnabled() then return end
         local window = MF.Scan and MF.Scan.AuctionWindow and MF.Scan.AuctionWindow()
         if window then
             Broker:Dock(window)
@@ -267,10 +272,18 @@ function Broker:AUCTION_HOUSE_SHOW()
 end
 
 function Broker:AUCTION_HOUSE_CLOSED()
+    self.ahOpen = false
+    self.dockToken = (self.dockToken or 0) + 1
     if self.docked and self.frame then
         self.frame:Hide()
         self.docked = false
     end
+end
+
+-- Faction and goblin auction houses keep separate prices: when the house
+-- switches (possibly after we docked), show the new house's numbers.
+function Broker:MF_AUCTION_HOUSE_CHANGED()
+    if self.frame and self.frame:IsShown() then self:Refresh() end
 end
 
 -- Prices records each scan and then sends MF_PRICES_UPDATED, so refresh
@@ -301,9 +314,11 @@ function Broker:OnEnable()
     self:RegisterEvent("AUCTION_HOUSE_SHOW")
     self:RegisterEvent("AUCTION_HOUSE_CLOSED")
     self:RegisterMessage("MF_PRICES_UPDATED")
+    self:RegisterMessage("MF_AUCTION_HOUSE_CHANGED")
 end
 
 function Broker:OnDisable()
+    self.dockToken = (self.dockToken or 0) + 1
     if self.frame then self.frame:Hide() end
     self.docked = false
 end
