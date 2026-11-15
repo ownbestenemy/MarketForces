@@ -31,6 +31,7 @@ read_globals = {
     "GetItemInfo",
     "IsShiftKeyDown",
     "ItemRefTooltip",
+    "ITEM_QUALITY_COLORS",
     "TooltipDataProcessor",
     "GetRealmName",
     "UIParent",
@@ -45,7 +46,7 @@ files["tests/"] = {
     globals = {
         "AuctionFrame", "AuctionHouseFrame", "C_AuctionHouse", "C_Timer", "CreateFrame", "DEFAULT_CHAT_FRAME", "Enum",
         "TooltipDataProcessor", "UIParent", "C_Item", "MarketForcesRazzleFrame", "hooksecurefunc",
-        "IsShiftKeyDown", "ITEM_SOULBOUND",
+        "IsShiftKeyDown", "ITEM_SOULBOUND", "ITEM_QUALITY_COLORS",
         "GetAddOnMetadata", "GetRealmName", "MarketForcesScanButton", "UnitExists", "UnitFactionGroup", "time",
     },
 }
