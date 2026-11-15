@@ -147,6 +147,25 @@ function H.closeAuctionHouse()
     H.fire("AUCTION_HOUSE_CLOSED")
 end
 
+-- Tooltips ----------------------------------------------------------------------------------
+
+-- Modern tooltip hook: H.showItemTooltip(itemID) runs the registered post
+-- calls against a fake tooltip and returns its added lines.
+Enum = { TooltipDataType = { Item = 0 } }
+local postCalls = {}
+TooltipDataProcessor = {
+    AddTooltipPostCall = function(kind, fn) postCalls[#postCalls + 1] = { kind = kind, fn = fn } end,
+}
+function H.showItemTooltip(itemID)
+    local tip = { lines = {} }
+    function tip:AddDoubleLine(left, right) self.lines[#self.lines + 1] = H.plain(left) .. " = " .. H.plain(right) end
+    function tip:Show() end
+    for _, call in ipairs(postCalls) do
+        if call.kind == Enum.TooltipDataType.Item then call.fn(tip, { id = itemID }) end
+    end
+    return tip.lines
+end
+
 -- Loading the addon ---------------------------------------------------------------------------
 
 -- Loads every file in the .toc. beforeCore(ns), if given, runs just before

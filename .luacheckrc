@@ -23,7 +23,11 @@ read_globals = {
     "C_Timer",
     "CreateFrame",
     "DEFAULT_CHAT_FRAME",
+    "Enum",
+    "GameTooltip",
     "GetAddOnMetadata",
+    "ItemRefTooltip",
+    "TooltipDataProcessor",
     "GetRealmName",
     "UnitExists",
     "UnitFactionGroup",
@@ -32,7 +36,8 @@ read_globals = {
 
 files["tests/"] = {
     globals = {
-        "AuctionFrame", "AuctionHouseFrame", "C_AuctionHouse", "C_Timer", "CreateFrame", "DEFAULT_CHAT_FRAME",
+        "AuctionFrame", "AuctionHouseFrame", "C_AuctionHouse", "C_Timer", "CreateFrame", "DEFAULT_CHAT_FRAME", "Enum",
+        "TooltipDataProcessor",
         "GetAddOnMetadata", "GetRealmName", "MarketForcesScanButton", "UnitExists", "UnitFactionGroup", "time",
     },
 }

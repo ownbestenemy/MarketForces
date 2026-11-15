@@ -17,7 +17,7 @@
 --
 -- Saved per auction house in db.ah.items[itemID]:
 --   l = minBuyout of the latest scan, q = units listed, t = time last seen,
---   d = { [dayNumber] = { scanValue average, number of scans that day } }
+--   d = { [dayNumber] = { sum of that day's scan values, number of scans } }
 local _, MF = ...
 
 local Util = MF.Util
@@ -72,7 +72,7 @@ local function blend(days, today, halfLife)
         local age = today - day
         if age < 0 then age = 0 end
         local w = 0.5 ^ (age / halfLife)
-        weighted = weighted + entry[1] * w
+        weighted = weighted + (entry[1] / entry[2]) * w
         weights = weights + w
     end
     if weights == 0 then return nil end
@@ -98,7 +98,7 @@ function Prices:RecordSnapshot(snapshot)
         if value then
             local day = entry.d[today]
             if day then
-                day[1] = floor((day[1] * day[2] + value) / (day[2] + 1) + 0.5)
+                day[1] = day[1] + value
                 day[2] = day[2] + 1
             else
                 entry.d[today] = { value, 1 }
@@ -134,17 +134,23 @@ function Prices:ItemsFor(key)
     return house.Prices.items
 end
 
+-- Drops an entry's days older than historyDays. Returns true when the
+-- whole entry has expired (no history and not seen within historyDays).
+function Prices:PruneEntry(entry, now)
+    local keep = self.db.global.historyDays
+    local oldest = dayNumber(now) - keep + 1
+    for day in pairs(entry.d) do
+        if day < oldest then entry.d[day] = nil end
+    end
+    return next(entry.d) == nil and (entry.t or 0) < now - keep * DAY
+end
+
 -- Drops days older than historyDays and items with no history left.
 function Prices:Prune(key, now)
+    now = now or time()
     local store = self:ItemsFor(key)
-    local oldest = dayNumber(now or time()) - self.db.global.historyDays + 1
     for itemID, entry in pairs(store) do
-        for day in pairs(entry.d) do
-            if day < oldest then entry.d[day] = nil end
-        end
-        if next(entry.d) == nil and (entry.t or 0) < (now or time()) - self.db.global.historyDays * DAY then
-            store[itemID] = nil
-        end
+        if self:PruneEntry(entry, now) then store[itemID] = nil end
     end
 end
 
@@ -154,8 +160,14 @@ end
 function Prices:GetPrice(itemID, key)
     itemID = tonumber(itemID)
     if not itemID then return nil end
-    local entry = self:ItemsFor(key)[itemID]
+    local store = self:ItemsFor(key)
+    local entry = store[itemID]
     if not entry then return nil end
+    -- Any house's data may be old (e.g. a neutral AH not visited in weeks).
+    if self:PruneEntry(entry, time()) then
+        store[itemID] = nil
+        return nil
+    end
     local days = 0
     for _ in pairs(entry.d) do days = days + 1 end
     return {
@@ -199,7 +211,12 @@ function Prices:OnInitialize()
     end)
 end
 
+function Prices:MF_AUCTION_HOUSE_CHANGED(_, key)
+    self:Prune(key, time())
+end
+
 function Prices:OnEnable()
     self:RegisterMessage("MF_SCAN_COMPLETE")
+    self:RegisterMessage("MF_AUCTION_HOUSE_CHANGED")
     self:Prune(nil, time())
 end

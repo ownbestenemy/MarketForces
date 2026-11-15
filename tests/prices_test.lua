@@ -94,6 +94,22 @@ scanWith({ { itemID = 2770, count = 1, buyout = 500 } })
 check(Prices:GetPrice(2589) == nil, "item not seen for 30 days forgotten")
 check(Prices:GetPrice(2770) ~= nil, "recently seen item kept")
 
+-- Same-day average keeps full precision: 1000 then 49 x 900 -> 902.
+H.advance(15 * 60)
+for i = 1, 50 do
+    local unit = i == 1 and 1000 or 900
+    Prices:RecordSnapshot({ key = MF.db.ahKey, time = H.now, auctions = 1,
+        items = { [5000] = { quantity = 1, auctions = 1, minBuyout = unit, listings = { { unit, 1 } } } } })
+end
+check(Prices:GetPrice(5000).market == 902, "daily average not skewed by rounding")
+
+-- Old data at another house expires even without visiting it.
+local neutral = Prices:ItemsFor("US-RP PvP-Neutral")
+check(neutral[2589] ~= nil, "neutral history still stored")
+H.advance(40 * DAY)
+check(Prices:GetPrice(2589, "US-RP PvP-Neutral") == nil, "expired neutral prices not returned")
+check(neutral[2589] == nil, "expired neutral entry removed on lookup")
+
 -- Saved where expected.
 check(MarketForcesDB.auctionHouses["US-RP PvP-Horde"].Prices.items[2770] ~= nil, "history saved per auction house")
 
