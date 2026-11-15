@@ -30,7 +30,8 @@ movable, with its position saved. Razzle greets you with how fresh the
 prices are, lists bargains (items whose cheapest listing is at or below 70%
 of market value and saves at least 1s a unit, most coin saved first, each
 row showing the item's icon and quality colour; hover a row for the item's
-tooltip) and answers price checks typed or
+tooltip, click it to open a commodity's buy view, or search for other items, on
+the auction house's Buy tab; the player buys with Blizzard's own button) and answers price checks typed or
 shift-clicked into its box. Razzle never buys, posts or cancels anything.
 
 Post hooks Blizzard's sell frames (`ItemSellFrame`, `CommoditiesSellFrame`).

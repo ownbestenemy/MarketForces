@@ -207,7 +207,8 @@ function Broker:CreateWindow()
     dealsHeader:SetPoint("TOPLEFT", portrait, "BOTTOMLEFT", 0, -40)
     dealsHeader:SetText("Bargains on the board")
 
-    -- Each row is a button so hovering it shows the item's tooltip.
+    -- Each row is a button: hover shows the item's tooltip, a click opens the
+    -- item in the auction house's buy view (the player buys it themselves).
     f.dealLines, f.dealRows = {}, {}
     local previous = dealsHeader
     for i = 1, self.db.global.maxDeals do
@@ -221,10 +222,14 @@ function Broker:CreateWindow()
             if button.itemID and GameTooltip then
                 GameTooltip:SetOwner(button, "ANCHOR_RIGHT")
                 GameTooltip:SetItemByID(button.itemID)
+                GameTooltip:AddLine("Click to see it at the auction house", 0.5, 0.8, 1)
                 GameTooltip:Show()
             end
         end)
         row:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+        row:SetScript("OnClick", function(button)
+            if button.itemID then f.speech:SetText(Broker:ShowDeal(button.itemID, button.price)) end
+        end)
         f.dealLines[i], f.dealRows[i] = line, row
         previous = row
     end
@@ -284,6 +289,7 @@ function Broker:RefreshDeals()
     for i, line in ipairs(f.dealLines) do
         local deal = shown[i]
         f.dealRows[i].itemID = deal and deal.itemID
+        f.dealRows[i].price = deal and deal.minBuyout
         if deal then
             line:SetText(self.DealLine(deal))
         elseif i == #shown + 1 and loading > 0 then
@@ -294,6 +300,46 @@ function Broker:RefreshDeals()
             line:SetText("")
         end
     end
+end
+
+-- Opens an item in the auction house's buy view, the same as clicking it in
+-- Blizzard's browse results, so the player can look and buy it with their
+-- own click. This only shows the item; it never buys. Returns Razzle's line.
+function Broker:ShowDeal(itemID, price)
+    local name = Broker.ItemName(itemID)
+    local window = AuctionHouseFrame
+    local scan = MF.Scan
+    if not (window and scan and scan:IsAuctionHouseOpen()) then
+        return "Meet me at the auction house and I'll show you the " .. name .. "."
+    end
+    -- Commodities are keyed by item ID alone, so Blizzard's own path from a
+    -- browse result opens the quantity buy frame directly. Other items' keys
+    -- carry an item level and suffix we don't know, so those get a search.
+    if window.SelectBrowseResult and C_AuctionHouse and C_AuctionHouse.MakeItemKey
+        and C_AuctionHouse.GetItemKeyInfo then
+        local itemKey = C_AuctionHouse.MakeItemKey(itemID)
+        local info = C_AuctionHouse.GetItemKeyInfo(itemKey)
+        if info and info.isCommodity
+            and pcall(window.SelectBrowseResult, window, { itemKey = itemKey, minPrice = price }) then
+            return "Here's the " .. name .. ". Have a look; if you like it, the buy button's all yours, boss."
+        end
+    end
+    -- Otherwise search for it by name on the Buy tab, with any category the
+    -- player picked cleared so it can't hide the item.
+    local bar = window.SearchBar
+    if bar and bar.SearchBox and bar.StartSearch then
+        if window.SetDisplayMode and AuctionHouseFrameDisplayMode and AuctionHouseFrameDisplayMode.Buy then
+            window:SetDisplayMode(AuctionHouseFrameDisplayMode.Buy)
+        end
+        local categories = window.CategoriesList
+        if categories and categories.SetSelectedCategory then
+            pcall(categories.SetSelectedCategory, categories, nil, nil, nil)
+        end
+        bar.SearchBox:SetText(name)
+        bar:StartSearch()
+        return "I searched the board for " .. name .. ". Pick your listing, boss."
+    end
+    return "I can't open that for you here. Search the auction house for " .. name .. "."
 end
 
 -- Beside the auction house window.
