@@ -8,7 +8,9 @@
 --   Competing listings  the item's listings: live from the auction house
 --                     once Blizzard's sell slot has searched for it,
 --                     otherwise the cheapest ones from your last scan. Your
---                     own listings are marked. Click one to put its price in
+--                     own listings are marked, and a "vs market" column says
+--                     how far each sits from market value (-12%, +8%).
+--                     Click one to put its price in
 --                     Blizzard's price box.
 --   Your results      Razzle's price, then what your auction mail says
 --                     about this item (History.lua): sold, sell-through,
@@ -113,6 +115,16 @@ function Broker.ListingLine(listing)
     local line = string.format("%d at %s", listing[2], Util.FormatMoney(listing[1]))
     if listing[3] then return BLUE .. line .. " (yours)|r" end
     return line
+end
+
+-- How far a price sits from market value, e.g. "-12%" (green, under
+-- market), "+8%" (orange, over) or "0%". Empty without a market value.
+function Broker.VsMarket(price, market)
+    if not (price and market and market > 0) then return "" end
+    local pct = math.floor((price - market) / market * 100 + 0.5)
+    if pct < 0 then return "|cff33ff33" .. pct .. "%|r" end
+    if pct > 0 then return "|cffff9933+" .. pct .. "%|r" end
+    return "0%"
 end
 
 -- Your results -----------------------------------------------------------------
@@ -320,7 +332,12 @@ function Broker:BuildSellPage(f, page)
     if f.sellItemName.SetWordWrap then f.sellItemName:SetWordWrap(false) end
     f.sellSource = Broker.NewText(listings, "GameFontDisableSmall", W)
     f.sellSource:SetPoint("TOPLEFT", f.sellItemName, "BOTTOMLEFT", 0, -2)
-    f.sellListLines, f.sellListRows = {}, {}
+    -- The "vs market" column: each listing's distance from market value.
+    local vsHeader = Broker.NewText(listings, "GameFontNormalSmall", 60)
+    vsHeader:SetPoint("TOPRIGHT", listings, "TOPRIGHT", 0, -2)
+    vsHeader:SetJustifyH("RIGHT")
+    vsHeader:SetText("vs market")
+    f.sellListLines, f.sellListRows, f.sellListPcts = {}, {}, {}
     previous = f.sellSource
     for i = 1, self.SELL_LIST_ROWS do
         local row, line = Broker.NewItemRow(listings, "Click to put this price in the sell slot", W)
@@ -328,7 +345,11 @@ function Broker:BuildSellPage(f, page)
         row:SetScript("OnClick", function(button)
             if button.price then Broker:MatchListing(button.price) end
         end)
-        f.sellListLines[i], f.sellListRows[i] = line, row
+        local pct = Broker.NewText(row, "GameFontHighlightSmall", 44)
+        pct:SetPoint("RIGHT", row, "RIGHT", 0, 0)
+        pct:SetJustifyH("RIGHT")
+        line:SetWidth(W - 46)
+        f.sellListLines[i], f.sellListRows[i], f.sellListPcts[i] = line, row, pct
         previous = row
     end
 
@@ -410,6 +431,7 @@ function Broker:RefreshSell()
         f.sellItemName:SetText(GREY .. "Pick something from your bags|r")
         f.sellSource:SetText("")
         fill(f.sellListLines, {})
+        fill(f.sellListPcts, {})
         fill(f.sellPriceLines, {})
         fill(f.sellResultLines, {})
         fill(f.sellRecentLines, {})
@@ -418,17 +440,23 @@ function Broker:RefreshSell()
     f.sellItemName:SetText(Broker.ItemLabel(itemID) or Broker.ItemName(itemID))
     local listings, source, more = self:SellListings(itemID)
     f.sellSource:SetText(source)
+    local prices = MF.Prices
+    local p = prices and prices:IsEnabled() and prices:GetPrice(itemID)
+    local market = p and p.market
     local n = #f.sellListLines
     for i, line in ipairs(f.sellListLines) do
         local listing = listings[i]
+        local pct = ""
         if listing and i == n and (#listings > n or more) then
             line:SetText(GREY .. "...and more|r")
         elseif listing then
             line:SetText(self.ListingLine(listing))
+            pct = self.VsMarket(listing[1], market)
             f.sellListRows[i].itemID, f.sellListRows[i].price = itemID, listing[1]
         else
             line:SetText("")
         end
+        f.sellListPcts[i]:SetText(pct)
     end
     fill(f.sellPriceLines, self:SellPriceLines(itemID))
     local summary, recent = self:SellResultLines(itemID)

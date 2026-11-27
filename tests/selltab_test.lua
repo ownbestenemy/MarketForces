@@ -16,6 +16,11 @@ check(#merged == 2 and merged[1][1] == 150 and merged[1][3] == true and merged[2
     "listings merged by price, cheapest first, free ones dropped")
 check(H.plain(Broker.ListingLine({ 150, 10, true })) == "10 at 1s 50c (yours)", "your listing marked")
 check(H.plain(Broker.ListingLine({ 200, 8, false })) == "8 at 2s", "listing line")
+check(H.plain(Broker.VsMarket(88, 100)) == "-12%" and H.plain(Broker.VsMarket(108, 100)) == "+8%",
+    "percent under and over market")
+check(Broker.VsMarket(100, 100) == "0%" and Broker.VsMarket(100, nil) == "", "at market; no market")
+check(Broker.VsMarket(88, 100):find("^|cff33ff33") and Broker.VsMarket(108, 100):find("^|cffff9933"),
+    "under in green, over in orange")
 
 -- Scan: linen 2s market-ish, ore 10s.
 H.auctions = {
@@ -70,6 +75,9 @@ check(H.plain(frame.speech.text):find("Putting up 20 Linen Cloth", 1, true), "Ra
 check(H.plain(frame.sellBagLines[2].text):find("^> Linen Cloth"), "picked row marked")
 check(frame.sellSource.text:find("^From your last scan"), "listings from the scan until live ones arrive")
 check(H.plain(frame.sellListLines[1].text) == "5 at 1s 50c", "cheapest scan listing first")
+local linenMarket = MF.Prices:GetPrice(2589).market
+check(frame.sellListPcts[1].text == Broker.VsMarket(150, linenMarket) and frame.sellListPcts[1].text ~= "",
+    "vs market shown beside the scan listing")
 check(H.plain(frame.sellPriceLines[1].text):find("^Market value: "), "market value shown")
 check(H.plain(frame.sellPriceLines[2].text):find("^Razzle's price: "), "Razzle's price shown")
 check(H.plain(frame.sellResultLines[1].text) == "Sold 15 in 2 listings, ~2s each", "sales summed for this market only")
@@ -95,6 +103,8 @@ H.fire("COMMODITY_SEARCH_RESULTS_UPDATED", 2589)
 check(frame.sellSource.text == "Live from the auction house", "live listings shown")
 check(H.plain(frame.sellListLines[1].text) == "15 at 1s 40c", "live listings merged")
 check(H.plain(frame.sellListLines[2].text) == "4 at 1s 80c (yours)", "your live listing marked")
+check(frame.sellListPcts[2].text == Broker.VsMarket(180, linenMarket), "vs market for live listings")
+check(frame.sellListPcts[3].text == "", "empty rows have no percent")
 
 -- Click a listing: its price goes in Blizzard's price box (whole silver).
 sell.PriceInput.amount = 0

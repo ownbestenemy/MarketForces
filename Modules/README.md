@@ -69,7 +69,8 @@ Blizzard's sell slot the same way shift-clicking does (below), so
 Blizzard's own sell frame searches for its listings; the tab reads those
 results (`COMMODITY_SEARCH_RESULTS_UPDATED`, `ITEM_SEARCH_RESULTS_UPDATED`)
 and shows them live, your own marked, and until then shows the latest
-scan's cheapest listings. Clicking a listing puts its price (whole silver)
+scan's cheapest listings. A **vs market** column gives each listing's
+distance from market value (-12% in green, +8% in orange). Clicking a listing puts its price (whole silver)
 in Blizzard's price box, only when the sell slot holds that item. Whatever
 goes in the sell slot by hand is followed too. The tab never sends a
 search, never posts: the Post click is the player's.
