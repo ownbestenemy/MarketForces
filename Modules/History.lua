@@ -19,7 +19,8 @@
 --
 -- Records are account-wide, tagged with the market scope (region + ruleset)
 -- and character, and kept in History.db.global.records:
---   k = what the mail says, "type|name|count|money" (for matching)
+--   k = what the mail says and whose it is, "type|name|count|money|character|scope"
+--       (for matching)
 --   at = when the mail arrived, s = market scope, c = character
 --   type = "sold" | "bought" | "expired" | "cancelled"
 --   id = item ID (nil until known), name, n = units
@@ -179,7 +180,9 @@ function History:ReadMail(index, now)
     end
     record.n = (tonumber(count) and count > 0 and count) or subjectCount or 1
     record.id = record.id or self:ResolveName(name)
-    record.k = table.concat({ kind, name, record.n, money }, "|")
+    -- The ledger is account-wide, so the same mail text on another character
+    -- or in another market scope is a different mail.
+    record.k = table.concat({ kind, name, record.n, money, record.c or "", record.s }, "|")
     return record
 end
 

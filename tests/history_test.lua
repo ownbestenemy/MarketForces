@@ -109,6 +109,18 @@ H.fire("MAIL_INBOX_UPDATE")
 H.advance(1)
 check(#History.db.global.records == 4, "taking mail adds nothing")
 
+-- The same mail on another character is that character's own record.
+local playerName = "Mark"
+function UnitName() return playerName end
+playerName = "Alt"
+H.fire("MAIL_INBOX_UPDATE")
+H.advance(1)
+check(#History.db.global.records == 7, "another character's identical mail is recorded separately")
+playerName = "Mark"
+local keep = {}
+for _, r in ipairs(History.db.global.records) do if r.c ~= "Alt" then keep[#keep + 1] = r end end
+History.db.global.records = keep
+
 -- Purchases, expiries and cancellations carry the item.
 H.mail[#H.mail + 1] = { subject = "Auction won: Linen Cloth", daysLeft = 29.9,
     invoice = { "buyer", 600, nil }, item = { 2589, 10 } }
