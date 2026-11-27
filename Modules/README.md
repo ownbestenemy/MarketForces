@@ -9,6 +9,8 @@ the Core files and `Core\Core.lua`.
 | Prices | Built | Listen for scans and keep per item price history in `db.ah` |
 | Tooltip | Built | Show stored prices on item tooltips |
 | Post | Built | Fill in the sell price with market value; the player clicks Post |
+| History | Built | Read auction mail into a ledger: what sold (and for how much), what you bought, what expired or was cancelled |
+| Outside | Built | Optional prices from TSM or Auctionator, read in game, for items Razzle hasn't scanned |
 | Flip | Built | Flip advice: which cheap listings to buy, the relist price and the profit after the cut |
 | Broker | Built | Razzle, the goblin broker of Razzle's Dazzles: the window, greetings and advice, built on the modules above |
 
@@ -129,3 +131,26 @@ end
 `self.db.ah` points at the current auction house. When it changes (for
 example at a goblin AH), the core sends `MF_AUCTION_HOUSE_CHANGED`.
 Register slash commands with `MF:RegisterSlashCommand(name, help, func)`.
+
+History reads auction mail headers while the mailbox is open (it never
+opens, takes or deletes mail). Sold mail has no item attached, so the item is
+found by name: names learned from the sell slot and other auction mail, the
+item cache, then your bags; a sale whose item isn't known yet keeps its name
+and gets its ID once learned. Each mail is matched by what it says plus when
+it arrived, so reopening the mailbox, reordering it or logging in again never
+counts it twice. Records are account-wide per market scope, kept 30 days and
+capped at 2,000. Tooltips get a **Your results** line; `/mf history` gives a
+7-day summary, `/mf history recent` and `/mf history <item>` the details.
+
+Outside reads `TSM_API.GetCustomPriceValue` (DBMarket, then
+DBRegionMarketAvg) and `Auctionator.API.v1.GetAuctionPriceByItemID`, and
+caches what it reads per auction house for 7 days so characters without
+those addons still see them. Its tooltip line is labelled with the source and
+shows only when Razzle has no price of its own (`/mf outside always|off`).
+It is never mixed into Razzle's market value.
+
+Prices also reports a **trend** (average of the last 3 days against the 4 to
+14 days before; rising or falling at 10% or more) and a **confidence** score
+from days of history, how steady they are, freshness and units listed. The
+tooltip's **Razzle's read** line shows both (`/mf read` toggles it).
+

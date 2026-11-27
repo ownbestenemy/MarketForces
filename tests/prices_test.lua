@@ -140,4 +140,34 @@ check(neutral[2589] == nil, "expired neutral entry removed on lookup")
 -- Saved where expected.
 check(MarketForcesDB.auctionHouses["US-RP PvP-Horde"].Prices.items[2770] ~= nil, "history saved per auction house")
 
+
+-- Trend: last 3 days against the 4 to 14 days before.
+do
+    local T = Prices.Trend
+    local today = 1000
+    local function days(t)
+        local d = {}
+        for age, value in pairs(t) do d[today - age] = { value, 1, value } end
+        return d
+    end
+    check(T(days({ [0] = 100 }), today) == nil, "no trend from one day")
+    local dir, change = T(days({ [0] = 120, [5] = 100 }), today)
+    check(dir == "rising" and change == 20, "rising trend")
+    dir, change = T(days({ [1] = 80, [2] = 80, [7] = 100, [10] = 100 }), today)
+    check(dir == "falling" and change == -20, "falling trend")
+    check(T(days({ [0] = 104, [6] = 100 }), today) == "steady", "small moves are steady")
+    check(T(days({ [0] = 100, [20] = 50 }), today) == nil, "days older than 14 don't count")
+
+    local C = Prices.Confidence
+    local now = today * DAY + 3600
+    local thin = { d = days({ [0] = 100 }), q = 3, t = now }
+    local deep = { d = days({ [0] = 100, [1] = 101, [2] = 99, [3] = 100, [4] = 100, [5] = 102, [6] = 98 }),
+        q = 50, t = now }
+    check(Prices.ConfidenceLabel(C(thin, now)) == "low", "one thin day is low confidence")
+    check(Prices.ConfidenceLabel(C(deep, now)) == "high", "a steady week is high confidence")
+    deep.t = now - 10 * DAY
+    check(C(deep, now) < C({ d = deep.d, q = 50, t = now }, now), "stale data lowers confidence")
+    check(C({ d = {} }, now) == 0, "no history, no confidence")
+end
+
 H.finish("prices")

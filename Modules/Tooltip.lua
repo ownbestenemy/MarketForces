@@ -13,6 +13,7 @@ local Tooltip = MF:NewModule("Tooltip", {
     global = {
         show = true,
         advice = true, -- the "Razzle says" line
+        read = true,   -- the "Razzle's read" line: trend and confidence
     },
 })
 MF.Tooltip = Tooltip
@@ -71,6 +72,19 @@ function Tooltip.Advice(p, vendor, dealRatio, bound)
     return nil
 end
 
+-- "Rising 12%, high confidence" style text for a price table.
+function Tooltip.ReadText(p)
+    local prices = MF.Prices
+    local label = prices.ConfidenceLabel(p.confidence or 0) .. " confidence"
+    if p.trend == "steady" then return "Steady, " .. label end
+    if p.trend then
+        local word = p.trend == "rising" and "Rising " or "Falling "
+        return word .. math.abs(p.trendChange or 0) .. "%, " .. label
+    end
+    return label:sub(1, 1):upper() .. label:sub(2) .. " (" .. p.days .. (p.days == 1 and " day" or " days")
+        .. " of history)"
+end
+
 -- The lines Razzle adds for an item: list of { left, right }. Empty when
 -- there's nothing to say. Kept separate from the tooltip so it's testable.
 -- bound: the tooltip's copy of the item is bound (see IsBoundTooltip).
@@ -89,6 +103,19 @@ function Tooltip:LinesFor(itemID, bound)
     end
     if p and p.lastSeen then
         lines[#lines + 1] = { "Last scanned", ago(time() - p.lastSeen) }
+    end
+    if p and p.market and self.db.global.read then
+        lines[#lines + 1] = { "Razzle's read", Tooltip.ReadText(p) }
+    end
+    local history = MF.History
+    local own = history and history:IsEnabled() and history:Line(itemID)
+    if own then
+        lines[#lines + 1] = { "Your results", own }
+    end
+    local outside = MF.Outside
+    local outsideText = outside and outside:IsEnabled() and outside:Line(itemID, p and p.market ~= nil)
+    if outsideText then
+        lines[#lines + 1] = { "Outside price", outsideText }
     end
     if self.db.global.advice then
         local broker = MF.Broker
@@ -174,6 +201,10 @@ function Tooltip:OnInitialize()
     MF:RegisterSlashCommand("advice", "Turn Razzle's buy/auction/vendor advice on tooltips on or off", function()
         Tooltip.db.global.advice = not Tooltip.db.global.advice
         MF:Print("Razzle's tooltip advice", Tooltip.db.global.advice and "on" or "off")
+    end)
+    MF:RegisterSlashCommand("read", "Turn Razzle's trend and confidence line on tooltips on or off", function()
+        Tooltip.db.global.read = not Tooltip.db.global.read
+        MF:Print("Razzle's read on tooltips", Tooltip.db.global.read and "on" or "off")
     end)
     MF:RegisterSlashCommand("tooltip", "Turn tooltip prices on or off", function()
         Tooltip.db.global.show = not Tooltip.db.global.show

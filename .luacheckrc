@@ -49,6 +49,12 @@ read_globals = {
     "UnitFactionGroup",
     "hooksecurefunc",
     "time",
+    "GetInboxHeaderInfo",
+    "GetInboxInvoiceInfo",
+    "GetInboxItem",
+    "GetInboxItemLink",
+    "GetInboxNumItems",
+    "UnitName",
 }
 
 files["tests/"] = {
@@ -57,5 +63,8 @@ files["tests/"] = {
         "TooltipDataProcessor", "UIParent", "C_Item", "C_Container", "ChatFrameUtil", "HandleModifiedItemClick", "MarketForcesRazzleFrame", "hooksecurefunc",
         "IsShiftKeyDown", "IsModifiedClick", "ItemLocation", "SetCVar", "ChatEdit_GetActiveWindow", "ITEM_SOULBOUND", "ITEM_QUALITY_COLORS",
         "GetAddOnMetadata", "GetRealmName", "MarketForcesScanButton", "UnitExists", "UnitFactionGroup", "time",
+        "GetInboxHeaderInfo", "GetInboxInvoiceInfo", "GetInboxItem", "GetInboxItemLink", "GetInboxNumItems",
+        "UnitName", "TSM_API", "Auctionator", "AUCTION_SOLD_MAIL_SUBJECT", "AUCTION_WON_MAIL_SUBJECT",
+        "AUCTION_EXPIRED_MAIL_SUBJECT", "AUCTION_REMOVED_MAIL_SUBJECT",
     },
 }

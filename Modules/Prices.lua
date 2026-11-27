@@ -107,6 +107,66 @@ local function blend(days, today, halfLife, lowWeight)
 end
 Prices.Blend = blend
 
+-- Which way prices are heading: compares the average day value of the last
+-- 3 days with the 4 to 14 days before. Returns direction ("rising",
+-- "falling", "steady" or nil when there isn't enough history) and the
+-- change in percent.
+function Prices.Trend(days, today)
+    local recentSum, recentN, olderSum, olderN = 0, 0, 0, 0
+    for day, entry in pairs(days) do
+        local v = dayValue(entry)
+        local age = today - day
+        if v > 0 then
+            if age <= 2 then
+                recentSum, recentN = recentSum + v, recentN + 1
+            elseif age <= 14 then
+                olderSum, olderN = olderSum + v, olderN + 1
+            end
+        end
+    end
+    if recentN == 0 or olderN == 0 then return nil, 0 end
+    local recent, older = recentSum / recentN, olderSum / olderN
+    local change = floor((recent - older) / older * 100 + 0.5)
+    if change >= 10 then return "rising", change end
+    if change <= -10 then return "falling", change end
+    return "steady", change
+end
+
+-- How far to trust the market value, 0 to 1, from how many days of history
+-- there are (60% of the score, full at 7 days), how steady the days are,
+-- how fresh the last scan is and how many units were listed.
+function Prices.Confidence(entry, now)
+    local values = {}
+    for _, e in pairs(entry.d) do
+        local v = dayValue(e)
+        if v > 0 then values[#values + 1] = v end
+    end
+    if #values == 0 then return 0 end
+    local depth = math.min(#values, 7) / 7
+    local steady = 0.5
+    if #values >= 2 then
+        local sum = 0
+        for _, v in ipairs(values) do sum = sum + v end
+        local mean = sum / #values
+        local sq = 0
+        for _, v in ipairs(values) do sq = sq + (v - mean) ^ 2 end
+        local cv = math.sqrt(sq / #values) / mean
+        steady = cv < 0.15 and 1 or (cv < 0.35 and 0.6 or 0.3)
+    end
+    local age = now - (entry.t or 0)
+    local fresh = age < DAY and 1 or (age < 3 * DAY and 0.6 or (age < 7 * DAY and 0.3 or 0.1))
+    local q = entry.q or 0
+    local listed = q >= 20 and 1 or (q >= 5 and 0.6 or (q > 0 and 0.3 or 0))
+    return depth * 0.6 + steady * 0.15 + fresh * 0.15 + listed * 0.1
+end
+
+-- "high", "medium" or "low" for a confidence score.
+function Prices.ConfidenceLabel(score)
+    if score >= 0.7 then return "high" end
+    if score >= 0.4 then return "medium" end
+    return "low"
+end
+
 -- The cheapest listings as a flat ladder (see the header), or nil, more.
 function Prices.Ladder(listings, market, steps)
     if not listings or #listings == 0 then return nil end
@@ -213,6 +273,8 @@ end
 -- Prices for an item at an auction house (current house if key is nil).
 -- Returns nil if the item has never been seen, otherwise a table:
 --   market, minBuyout, quantity, lastSeen, days (days of history),
+--   trend ("rising"/"falling"/"steady"/nil) and trendChange (percent),
+--   confidence (0-1, see Prices.Confidence),
 --   ladder = { {unitPrice, units}, ... } cheapest listings of the latest
 --   scan (see the header; may be empty), ladderMore = listings left off
 function Prices:GetPrice(itemID, key)
@@ -232,7 +294,12 @@ function Prices:GetPrice(itemID, key)
     if entry.b then
         for i = 1, #entry.b - 1, 2 do ladder[#ladder + 1] = { entry.b[i], entry.b[i + 1] } end
     end
+    local today = dayNumber(time())
+    local trend, change = Prices.Trend(entry.d, today)
     return {
+        trend = trend,
+        trendChange = change,
+        confidence = Prices.Confidence(entry, time()),
         ladder = ladder,
         ladderMore = entry.bm == true,
         market = blend(entry.d, dayNumber(time()), self.db.global.halfLifeDays, self.db.global.lowWeight),
