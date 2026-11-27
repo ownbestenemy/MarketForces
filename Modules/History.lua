@@ -148,8 +148,10 @@ end
 -- Reading mail ----------------------------------------------------------------
 
 -- An auction mail at an inbox index as a record (not yet saved), or nil.
+-- Returns nil, true when it is an auction mail whose invoice or attached
+-- item hasn't loaded yet, so it can be read properly on a later update.
 function History:ReadMail(index, now)
-    local _, _, _, subject, money, _, daysLeft = GetInboxHeaderInfo(index)
+    local _, _, _, subject, money, _, daysLeft, itemCount = GetInboxHeaderInfo(index)
     local kind, name, subjectCount = History.ParseSubject(subject)
     if not kind then return nil end
     money = money or 0
@@ -164,10 +166,9 @@ function History:ReadMail(index, now)
     local count
     if kind == "sold" or kind == "bought" then
         local invoiceType, _, _, bid, _, _, _, _, _, _, invoiceCount = GetInboxInvoiceInfo(index)
-        if invoiceType == "seller" or invoiceType == "buyer" then
-            record.price = (bid and bid > 0) and bid or nil
-            count = invoiceCount
-        end
+        if invoiceType ~= "seller" and invoiceType ~= "buyer" then return nil, true end
+        record.price = (bid and bid > 0) and bid or nil
+        count = invoiceCount
     end
     if kind ~= "sold" and GetInboxItem then
         -- Bought, expired and cancelled mail carries the item itself.
@@ -176,6 +177,8 @@ function History:ReadMail(index, now)
         if id then
             record.id = id
             self:LearnItem(id, name)
+        elseif (tonumber(itemCount) or 0) > 0 then
+            return nil, true -- the attachment is still loading
         end
         count = count or attachedCount
     end
@@ -207,8 +210,10 @@ function History:ScanInbox()
     -- Only a fully readable inbox can tell us a mail has gone.
     local complete = (total == nil or shown >= total)
     for index = 1, shown do
-        local record = self:ReadMail(index, now)
-        if not record then
+        local record, pending = self:ReadMail(index, now)
+        if pending then
+            complete = false
+        elseif not record then
             local subject = select(4, GetInboxHeaderInfo(index))
             if not subject or subject == "" or subject == _G.RETRIEVING_DATA then complete = false end
         end
@@ -395,7 +400,8 @@ function History:QueueScan()
     self.scanQueued = true
     C_Timer.After(0.5, function()
         History.scanQueued = false
-        if History:IsEnabled() then History:ScanInbox() end
+        -- A closed mailbox reads as empty; never mistake that for collected mail.
+        if History:IsEnabled() and History.mailOpen then History:ScanInbox() end
     end)
 end
 

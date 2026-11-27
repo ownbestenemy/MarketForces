@@ -132,6 +132,46 @@ local goneCount = 0
 for _, r in ipairs(History.db.global.records) do if r.gone then goneCount = goneCount + 1 end end
 check(goneCount == 2, "partial inbox marks nothing gone")
 
+-- Mail whose invoice or attachment hasn't loaded waits, and marks nothing gone.
+H.mail[#H.mail + 1] = { subject = "Auction successful: Wool Cloth", money = 1900, daysLeft = 29.99,
+    invoice = nil }
+H.fire("MAIL_INBOX_UPDATE")
+H.advance(1)
+check(#History.db.global.records == 5, "sale without its invoice yet is not recorded")
+H.mail[#H.mail].invoice = { "seller", 2000, 20 }
+H.fire("MAIL_INBOX_UPDATE")
+H.advance(1)
+check(#History.db.global.records == 6 and History.db.global.records[6].n == 20, "recorded once the invoice loads")
+H.mail[#H.mail + 1] = { subject = "Auction expired: Wool Cloth", daysLeft = 29.99, item = { 2592, 7 } }
+local loading = H.mail[#H.mail]
+local realItem, realLink = GetInboxItem, GetInboxItemLink
+GetInboxItem = function(i) if H.mail[i] == loading then return nil end return realItem(i) end
+GetInboxItemLink = function(i) if H.mail[i] == loading then return nil end return realLink(i) end
+H.fire("MAIL_INBOX_UPDATE")
+H.advance(1)
+check(#History.db.global.records == 6, "expired mail with its item still loading waits")
+GetInboxItem, GetInboxItemLink = realItem, realLink
+H.fire("MAIL_INBOX_UPDATE")
+H.advance(1)
+check(#History.db.global.records == 7 and History.db.global.records[7].n == 7, "then recorded with the right count")
+table.remove(H.mail)
+table.remove(H.mail)
+local trimmed = {}
+for _, r in ipairs(History.db.global.records) do if r.name ~= "Wool Cloth" then trimmed[#trimmed + 1] = r end end
+History.db.global.records = trimmed
+
+-- A read queued just before the mailbox closes doesn't run (a closed inbox reads empty).
+H.fire("MAIL_INBOX_UPDATE")
+local realCount = GetInboxNumItems
+GetInboxNumItems = function() return 0, 0 end
+closeMail()
+H.advance(1)
+GetInboxNumItems = realCount
+local goneNow = 0
+for _, r in ipairs(History.db.global.records) do if r.gone then goneNow = goneNow + 1 end end
+check(goneNow == 2, "closing the mailbox marks nothing collected")
+openMail()
+
 -- The same mail on another character is that character's own record.
 local playerName = "Mark"
 function UnitName() return playerName end
