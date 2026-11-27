@@ -109,13 +109,36 @@ H.fire("MAIL_INBOX_UPDATE")
 H.advance(1)
 check(#History.db.global.records == 4, "taking mail adds nothing")
 
+-- Collect one twin; an identical mail arriving a minute later is new.
+local collected = table.remove(H.mail, 3)
+H.fire("MAIL_INBOX_UPDATE")
+H.advance(1)
+H.advance(60)
+H.mail[#H.mail + 1] = { subject = collected.subject, money = collected.money,
+    daysLeft = collected.daysLeft + 60 / 86400 - 2 / 86400, invoice = collected.invoice }
+H.fire("MAIL_INBOX_UPDATE")
+H.advance(1)
+check(#History.db.global.records == 5, "identical mail after collecting the first is recorded")
+H.fire("MAIL_INBOX_UPDATE")
+H.advance(1)
+check(#History.db.global.records == 5, "and not again on the next read")
+-- An inbox the client hasn't fully shown can't mark anything collected.
+local fullCount = GetInboxNumItems
+GetInboxNumItems = function() return 1, #H.mail end
+H.fire("MAIL_INBOX_UPDATE")
+H.advance(1)
+GetInboxNumItems = fullCount
+local goneCount = 0
+for _, r in ipairs(History.db.global.records) do if r.gone then goneCount = goneCount + 1 end end
+check(goneCount == 2, "partial inbox marks nothing gone")
+
 -- The same mail on another character is that character's own record.
 local playerName = "Mark"
 function UnitName() return playerName end
 playerName = "Alt"
 H.fire("MAIL_INBOX_UPDATE")
 H.advance(1)
-check(#History.db.global.records == 7, "another character's identical mail is recorded separately")
+check(#History.db.global.records == 8, "another character's identical mail is recorded separately")
 playerName = "Mark"
 local keep = {}
 for _, r in ipairs(History.db.global.records) do if r.c ~= "Alt" then keep[#keep + 1] = r end end
@@ -128,7 +151,7 @@ H.mail[#H.mail + 1] = { subject = "Auction expired: Linen Cloth", daysLeft = 29.
 H.mail[#H.mail + 1] = { subject = "Auction cancelled: Copper Ore", daysLeft = 29.9, item = { 2770, 5 } }
 H.fire("MAIL_INBOX_UPDATE")
 H.advance(1)
-check(#History.db.global.records == 7, "won, expired and cancelled recorded")
+check(#History.db.global.records == 8, "won, expired and cancelled recorded")
 
 local s = History:ItemStats(2589)
 check(s.sold == 20 and s.soldEach == 100 and s.bought == 10 and s.boughtEach == 60, "item stats: sold and bought")
@@ -137,7 +160,7 @@ check(H.plain(History:Line(2589)) == "20 sold at ~1s, 1 of 2 listings sold, 10 b
 check(History:ItemStats(424242) == nil and History:Line(424242) == nil, "no results for an untouched item")
 
 local t = History:Summary(7)
-check(t.salesCount == 4 and t.sales == 1900 + 950 + 950 + 950 and t.purchases == 600, "summary totals")
+check(t.salesCount == 5 and t.sales == 1900 + 950 * 4 and t.purchases == 600, "summary totals")
 check(t.expired == 1 and t.cancelled == 1 and t.profit == t.sales - 600, "summary counts and net")
 
 -- Tooltip shows your results.
@@ -150,7 +173,7 @@ check(found, "tooltip shows your results")
 -- Slash commands.
 H.clearChat()
 H.slash("history")
-check(H.chatHas("Sold 4 listings"), "/mf history summary")
+check(H.chatHas("Sold 5 listings"), "/mf history summary")
 H.clearChat()
 H.slash("history recent")
 check(H.chatHas("sold Linen Cloth x20"), "/mf history recent")

@@ -12,9 +12,10 @@
 --     Sales whose item can't be found yet keep the name and get their item
 --     ID filled in as soon as it's learned.
 --   * Each mail is counted once. A mail is recognised by what it says (type,
---     item, count, money) and when it arrived, which stays the same however
---     the inbox is reordered and across sessions. Identical mails that
---     arrived together are each matched to their own record.
+--     item, count, money), whose it is and when it arrived, which stays the
+--     same however the inbox is reordered and across sessions. Identical
+--     mails that arrived together are each matched to their own record, and
+--     a record whose mail was collected (gone = true) is never matched again.
 --   * The ledger is pruned by age (keepDays) and capped (maxRecords).
 --
 -- Records are account-wide, tagged with the market scope (region + ruleset)
@@ -194,15 +195,23 @@ function History:ScanInbox()
     local records = self.db.global.records
     local byKey = {}
     for _, r in ipairs(records) do
-        if r.k then
+        if r.k and not r.gone then
             byKey[r.k] = byKey[r.k] or {}
             table.insert(byKey[r.k], r)
         end
     end
     local used = {}
     local added = 0
-    for index = 1, GetInboxNumItems() or 0 do
+    local shown, total = GetInboxNumItems()
+    shown = shown or 0
+    -- Only a fully readable inbox can tell us a mail has gone.
+    local complete = (total == nil or shown >= total)
+    for index = 1, shown do
         local record = self:ReadMail(index, now)
+        if not record then
+            local subject = select(4, GetInboxHeaderInfo(index))
+            if not subject or subject == "" or subject == _G.RETRIEVING_DATA then complete = false end
+        end
         if record then
             local match
             for _, r in ipairs(byKey[record.k] or {}) do
@@ -217,12 +226,23 @@ function History:ScanInbox()
                 if not match.price and record.price then match.price = record.price end
             else
                 records[#records + 1] = record
+                used[record] = true
                 added = added + 1
                 if record.type == "sold" and self.db.global.alertOnSale and record.at > now - DAY then
                     self:Print("Sold " .. record.name .. (record.n > 1 and (" x" .. record.n) or "")
                         .. " for " .. Util.FormatMoney(record.money))
                 end
             end
+        end
+    end
+    -- A record of this character's mail that is no longer in a complete inbox
+    -- was collected. Mark it so an identical mail arriving soon after is
+    -- recorded as new instead of matched to it.
+    if complete then
+        local me = UnitName and UnitName("player") or nil
+        local scope = Util.GetMarketScope()
+        for _, r in ipairs(records) do
+            if not used[r] and not r.gone and r.c == me and r.s == scope then r.gone = true end
         end
     end
     if added > 0 then
