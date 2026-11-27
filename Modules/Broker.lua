@@ -786,6 +786,9 @@ end
 
 function Broker:OnDisable()
     self.dockToken = (self.dockToken or 0) + 1
+    -- Events stop while off, so a house change or the AH closing would go
+    -- unseen: live listings can't be trusted after this.
+    self.sellLive = nil
     if self.frame then self.frame:Hide() end
     self.docked = false
 end

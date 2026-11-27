@@ -143,6 +143,15 @@ check(H.plain(frame.sellListLines[1].text) == "1 at 5g" and frame.sellListLines[
     "gear listings read; bid-only left out")
 check(frame.sellSource.text == "Live from the auction house", "gear live")
 
+-- Broker turned off and on: live listings can't survive it.
+MF:DisableModule("Broker")
+MF:EnableModule("Broker")
+check(Broker.sellLive == nil, "live listings dropped when Broker is turned off")
+H.openAuctionHouse()
+frame.tabs[3]:Click()
+H.fire("ITEM_SEARCH_RESULTS_UPDATED", { itemID = 9003 })
+check(Broker.sellLive and Broker.sellLive.itemID == 9003, "live listings again after turning back on")
+
 -- Leaving the AH: live listings go, picking just looks.
 H.closeAuctionHouse()
 check(Broker.sellLive == nil, "live listings dropped when the AH closes")
