@@ -25,6 +25,14 @@ MF.Post = Post
 
 local SILVER = 100
 
+-- A price per unit rounded to the nearest silver (at least 1s), since the
+-- sell frames don't take copper.
+function Post.RoundPrice(copper)
+    local rounded = math.floor((tonumber(copper) or 0) / SILVER + 0.5) * SILVER
+    if rounded < SILVER then rounded = SILVER end
+    return rounded
+end
+
 -- The suggested buyout per unit for an item at the current auction house,
 -- or nil when there's no market value yet. Rounded to the nearest silver
 -- (at least 1s), since the sell frames don't take copper.
@@ -33,9 +41,7 @@ function Post:Suggest(itemID)
     if not (prices and prices:IsEnabled() and itemID) then return nil end
     local p = prices:GetPrice(itemID)
     if not (p and p.market) then return nil end
-    local rounded = math.floor(p.market / SILVER + 0.5) * SILVER
-    if rounded < SILVER then rounded = SILVER end
-    return rounded, p
+    return Post.RoundPrice(p.market), p
 end
 
 local function itemIDFrom(itemLocation)
@@ -71,6 +77,20 @@ function Post:OnItemSet(sellFrame, itemLocation)
             input:SetAmount(suggestion)
         end
     end)
+end
+
+-- Blizzard's sell frame showing this item right now (the one it went in
+-- last), or nil. Razzle's Sell tab only touches a price box through this,
+-- so it can never change the price of a different item.
+function Post:SellFrameFor(itemID)
+    local window = AuctionHouseFrame
+    if not (window and itemID) then return nil end
+    for _, key in ipairs({ "CommoditiesSellFrame", "ItemSellFrame" }) do
+        local sellFrame = window[key]
+        if sellFrame and sellFrame.IsShown and sellFrame:IsShown() and selected[sellFrame] == itemID then
+            return sellFrame
+        end
+    end
 end
 
 -- Hooks each sell frame once. Hooks can't be removed, so OnItemSet checks
