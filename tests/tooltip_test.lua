@@ -20,13 +20,14 @@ local lines = H.showItemTooltip(2589)
 check(lines[1] == "Razzle's market value = 2s 50c", "market value line")
 check(lines[2] == "Cheapest listed = 2s 50c (10)", "cheapest listing line")
 check(lines[3] == "Last scanned = 2h ago", "last scanned line")
-check(lines[4] == "Razzle says = Auction it (about 2s 37c after the AH cut)", "advice line")
+check(lines[4] == "Razzle's read = Low confidence (1 day of history)", "trend and confidence line")
+check(lines[5] == "Razzle says = Auction it (about 2s 37c after the AH cut)", "advice line")
 check(#H.showItemTooltip(424242) == 0, "unscanned item gets no lines")
 
 H.slash("tooltip")
 check(#H.showItemTooltip(2589) == 0, "/mf tooltip turns lines off")
 H.slash("tooltip")
-check(#H.showItemTooltip(2589) == 4, "/mf tooltip turns them back on")
+check(#H.showItemTooltip(2589) == 5, "/mf tooltip turns them back on")
 
 H.slash("disable tooltip")
 check(#H.showItemTooltip(2589) == 0, "disabled module adds nothing")
@@ -63,19 +64,24 @@ check(#vendorOnly == 1 and vendorOnly[1] == "Razzle says = Vendor it (no auction
 
 -- A bound copy of a scanned item never hears "Auction it".
 local boundLines = H.showItemTooltip(2589, { bound = true })
-check(#boundLines == 3, "bound copy: prices shown, no auction advice (tooltip data)")
+check(#boundLines == 4, "bound copy: prices shown, no auction advice (tooltip data)")
 H.vendorPrices[2589] = 5
 boundLines = H.showItemTooltip(2589, { bound = true })
-check(boundLines[4] == "Razzle says = Vendor it (yours is bound, so it can't be auctioned)",
+check(boundLines[5] == "Razzle says = Vendor it (yours is bound, so it can't be auctioned)",
     "bound copy with vendor price: vendor it")
 boundLines = H.showItemTooltip(2589, { boundText = true })
-check(boundLines[4] == "Razzle says = Vendor it (yours is bound, so it can't be auctioned)",
+check(boundLines[5] == "Razzle says = Vendor it (yours is bound, so it can't be auctioned)",
     "bound copy found from the tooltip's text lines")
 H.vendorPrices[2589] = nil
 
 -- /mf advice turns the line off.
 H.slash("advice")
-check(#H.showItemTooltip(2589) == 3 and #H.showItemTooltip(7777) == 0, "/mf advice hides the advice")
+check(#H.showItemTooltip(2589) == 4 and #H.showItemTooltip(7777) == 0, "/mf advice hides the advice")
 H.slash("advice")
+
+-- /mf read turns the trend and confidence line off.
+H.slash("read")
+check(#H.showItemTooltip(2589) == 4, "/mf read hides the read line")
+H.slash("read")
 
 H.finish("tooltip")
