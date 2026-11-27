@@ -61,9 +61,11 @@ function Post:OnItemSet(sellFrame, itemLocation)
     -- so a quick second pick can't get the first item's price.
     pending[sellFrame] = (pending[sellFrame] or 0) + 1
     local token = pending[sellFrame]
-    if not self:IsEnabled() then return end
+    -- Which item each frame holds is tracked even while Post is off, so
+    -- SellFrameFor never vouches for an item that has since been swapped.
     local itemID = itemIDFrom(itemLocation)
     selected[sellFrame] = itemID
+    if not self:IsEnabled() then return end
     if not itemID then return end
     local suggestion, p = self:Suggest(itemID)
     self:SendMessage("MF_POST_ITEM_SELECTED", itemID, suggestion, p)

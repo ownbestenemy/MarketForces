@@ -120,6 +120,16 @@ Broker:MatchListing(150)
 check(sell.PriceInput.amount == 7, "no price set when the slot holds another item")
 check(H.plain(frame.speech.text):find("Pick Linen Cloth from your bags first"), "Razzle says to pick it")
 
+-- Post off while the slot changes hands: the old item's listing can't be
+-- matched into the new item once Post is back.
+Broker.sellItem = 2770
+MF:DisableModule("Post")
+sell:SetItem({ itemID = 2589 })
+MF:EnableModule("Post")
+sell.PriceInput.amount = 7
+Broker:MatchListing(150)
+check(sell.PriceInput.amount == 7, "a swap while Post was off isn't missed")
+
 -- Non-commodity results: read by item key.
 H.bags[0][4] = { itemID = 9003, stackCount = 1 }
 H.itemNames[9003] = "Iron Sword"
