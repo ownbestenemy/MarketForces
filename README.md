@@ -100,6 +100,7 @@ Modules/           feature modules (see Modules/README.md)
   Post.lua         fills in sell prices with market value (you click Post)
   Flip.lua         flip advice: what to buy cheap, what to relist at, profit
   Broker.lua       Razzle's window: greetings, bargains, price checks, flips tab
+  BrokerSell.lua   Razzle's Sell tab: bags, competing listings, your results
 tests/             offline tests against a fake WoW API (run.lua runs them all)
 ```
 

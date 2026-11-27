@@ -5,6 +5,8 @@
 -- you, says how fresh the prices are, lists bargains from the latest scan,
 -- talks about items you put up for sale and looks up prices. The Flips tab
 -- says whether an item is worth buying cheap and relisting (see Flip.lua).
+-- The Sell tab puts your bags, the competing listings and your own past
+-- results side by side (see BrokerSell.lua).
 -- Razzle only talks: every buy, post and cancel stays with you and
 -- Blizzard's own buttons.
 --
@@ -179,10 +181,11 @@ local function newText(parent, template, width)
 end
 
 -- A row button that shows the item's tooltip on hover.
-local function newItemRow(parent, hint)
+local function newItemRow(parent, hint, width)
+    width = width or 290
     local row = CreateFrame("Button", nil, parent)
-    row:SetSize(290, 16)
-    local line = newText(row, "GameFontHighlightSmall", 290)
+    row:SetSize(width, 16)
+    local line = newText(row, "GameFontHighlightSmall", width)
     line:SetPoint("LEFT", row, "LEFT", 0, 0)
     if line.SetWordWrap then line:SetWordWrap(false) end
     row:SetScript("OnEnter", function(button)
@@ -196,6 +199,7 @@ local function newItemRow(parent, hint)
     row:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
     return row, line
 end
+Broker.NewText, Broker.NewItemRow = newText, newItemRow
 
 -- Shift-clicking an item puts its link in whichever of Razzle's boxes has
 -- focus. Blizzard's link path differs between clients (ChatEdit_InsertLink,
@@ -244,13 +248,14 @@ local function newItemBox(parent, name, onEnter)
     return box
 end
 
-Broker.TABS = { "Bargains", "Flips" }
+Broker.TABS = { "Bargains", "Flips", "Sell" }
+Broker.WIDTH, Broker.WIDE = 320, 620 -- the Sell tab's three columns need the wide window
 Broker.FLIP_ROWS = 6
 
 function Broker:CreateWindow()
     if self.frame then return self.frame end
     local f = CreateFrame("Frame", "MarketForcesRazzleFrame", UIParent, "BasicFrameTemplateWithInset")
-    f:SetSize(320, 480)
+    f:SetSize(self.WIDTH, 480)
     f:SetFrameStrata("HIGH")
     f:SetClampedToScreen(true)
     f:EnableMouse(true)
@@ -385,12 +390,14 @@ function Broker:CreateWindow()
         previous = row
     end
 
+    if self.BuildSellPage then self:BuildSellPage(f, f.pages.Sell) end
+
     self.frame = f
     self:ShowTab(self.tab or "Bargains")
     return f
 end
 
--- Shows one page of the window: "Bargains" or "Flips".
+-- Shows one page of the window: "Bargains", "Flips" or "Sell".
 function Broker:ShowTab(title)
     local f = self.frame
     if not (f and f.pages[title]) then return end
@@ -404,7 +411,9 @@ function Broker:ShowTab(title)
             f.tabs[i]:Enable()
         end
     end
+    f:SetWidth(title == "Sell" and self.WIDE or self.WIDTH)
     if title == "Flips" then self:RefreshFlips() end
+    if title == "Sell" and self.RefreshSell then self:RefreshSell() end
 end
 
 -- Razzle's flip numbers for typed text, an item link or an item ID.
@@ -546,6 +555,7 @@ function Broker:Refresh(extra)
     -- its advice and AH button never describe old listings.
     if self.flipQuery then self:CheckFlip(self.flipQuery) end
     if self.tab == "Flips" then self:RefreshFlips() end
+    if self.tab == "Sell" and self.RefreshSell then self:RefreshSell() end
 end
 
 -- Fills the board. Rows whose item names are still loading are skipped
@@ -678,6 +688,7 @@ end
 
 function Broker:AUCTION_HOUSE_CLOSED()
     self.ahOpen = false
+    self.sellLive = nil -- live listings only mean something while you're there
     self.dockToken = (self.dockToken or 0) + 1
     if self.docked and self.frame then
         self.frame:Hide()
@@ -692,6 +703,8 @@ function Broker:MF_POST_SAYS(_, line)
 end
 
 function Broker:MF_POST_ITEM_SELECTED(_, itemID, suggestion, p)
+    -- Whatever goes in the sell slot is what the Sell tab looks at.
+    if self.SelectSellItem then self:SelectSellItem(itemID) end
     if not (self.frame and self.frame:IsShown()) then return end
     local filled = suggestion and MF.Post and MF.Post.db.global.fillPrice
     self.frame.speech:SetText(self.PostLine(itemID, suggestion, p, filled))
@@ -705,7 +718,8 @@ function Broker:GET_ITEM_INFO_RECEIVED(_, itemID)
     if not itemID then return end
     local deal = self.waitingFor and self.waitingFor[itemID]
     local pick = self.tab == "Flips" and self.flipsWaitingFor and self.flipsWaitingFor[itemID]
-    if not (deal or pick) then return end
+    local bag = self.tab == "Sell" and self.sellWaitingFor and self.sellWaitingFor[itemID]
+    if not (deal or pick or bag) then return end
     if self.namesPending or not (self.frame and self.frame:IsShown()) then return end
     self.namesPending = true
     C_Timer.After(0.2, function()
@@ -713,6 +727,7 @@ function Broker:GET_ITEM_INFO_RECEIVED(_, itemID)
         if Broker:IsEnabled() and Broker.frame and Broker.frame:IsShown() then
             Broker:RefreshDeals()
             if Broker.tab == "Flips" then Broker:RefreshFlips() end
+            if Broker.tab == "Sell" and Broker.RefreshSell then Broker:RefreshSell() end
         end
     end)
 end
@@ -720,6 +735,7 @@ end
 -- Faction and goblin auction houses keep separate prices: when the house
 -- switches (possibly after we docked), show the new house's numbers.
 function Broker:MF_AUCTION_HOUSE_CHANGED()
+    self.sellLive = nil -- another house's listings
     if self.frame and self.frame:IsShown() then self:Refresh() end
 end
 
@@ -756,6 +772,7 @@ function Broker:OnEnable()
     self:RegisterMessage("MF_POST_SAYS")
     self:RegisterEvent("GET_ITEM_INFO_RECEIVED")
     self:RegisterEvent("BAG_UPDATE_DELAYED")
+    if self.RegisterSellEvents then self:RegisterSellEvents() end
 end
 
 -- Your bags changed: redo the checked item (its advice counts your copies)
@@ -764,6 +781,7 @@ function Broker:BAG_UPDATE_DELAYED()
     if not (self.frame and self.frame:IsShown()) then return end
     if self.flipQuery then self:CheckFlip(self.flipQuery) end
     if self.tab == "Flips" and (self.flipList or "bags") == "bags" then self:RefreshFlips() end
+    if self.tab == "Sell" and self.RefreshSell then self:RefreshSell() end
 end
 
 function Broker:OnDisable()

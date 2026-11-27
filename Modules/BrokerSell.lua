@@ -1,0 +1,466 @@
+-- MarketForces Broker: Razzle's Sell tab.
+--
+-- Three columns side by side, modelled on AuctioneerModern's Post tab:
+--   Your bags         sellable items, most valuable first. Click one to look
+--                     at it; at the auction house it also goes into
+--                     Blizzard's sell slot with Razzle's price, quantity and
+--                     duration (the same as shift-clicking it, see Post.lua).
+--   Competing listings  the item's listings: live from the auction house
+--                     once Blizzard's sell slot has searched for it,
+--                     otherwise the cheapest ones from your last scan. Your
+--                     own listings are marked. Click one to put its price in
+--                     Blizzard's price box.
+--   Your results      Razzle's price, then what your auction mail says
+--                     about this item (History.lua): sold, sell-through,
+--                     expired, bought, and the latest records.
+--
+-- Razzle never posts. Posting stays your own click on Blizzard's Post
+-- button; this tab only fills in Blizzard's sell frame the way you could by
+-- hand, and only reads search results Blizzard's own sell frame asked for.
+local _, MF = ...
+
+local Util = MF.Util
+local Broker = MF.Broker
+
+Broker.SELL_BAG_ROWS = 13
+Broker.SELL_LIST_ROWS = 11
+Broker.SELL_RECENT_ROWS = 5
+
+local HOUR, DAY = 60 * 60, 24 * 60 * 60
+local GOLD, BLUE, GREY = "|cffffd100", "|cff4fb3ff", "|cff808080"
+local TYPE_COLOR = { sold = "|cff33ff33", bought = "|cffffaa33", expired = "|cffff4444", cancelled = "|cffffff33" }
+
+-- "5m ago", "3h ago", "2d ago".
+function Broker.Ago(seconds)
+    seconds = math.max(0, seconds or 0)
+    if seconds < HOUR then return math.max(1, math.floor(seconds / 60)) .. "m ago" end
+    if seconds < DAY then return math.floor(seconds / HOUR) .. "h ago" end
+    return math.floor(seconds / DAY) .. "d ago"
+end
+
+-- Listings ---------------------------------------------------------------------
+
+-- Merges { price, units, yours } listings at the same price, cheapest first.
+function Broker.MergeListings(listings)
+    local byPrice, out = {}, {}
+    for _, l in ipairs(listings) do
+        local price, units = l[1], l[2] or 0
+        if price and price > 0 then
+            local row = byPrice[price]
+            if not row then
+                row = { price, 0, false }
+                byPrice[price] = row
+                out[#out + 1] = row
+            end
+            row[2] = row[2] + units
+            row[3] = row[3] or l[3] == true
+        end
+    end
+    table.sort(out, function(a, b) return a[1] < b[1] end)
+    return out
+end
+
+-- Live commodity listings Blizzard's sell frame searched for.
+function Broker.ReadCommodityResults(itemID)
+    local AH = C_AuctionHouse
+    if not (AH and AH.GetNumCommoditySearchResults and AH.GetCommoditySearchResultInfo) then return nil end
+    local listings = {}
+    for i = 1, AH.GetNumCommoditySearchResults(itemID) or 0 do
+        local info = AH.GetCommoditySearchResultInfo(itemID, i)
+        if info then
+            local yours = info.containsOwnerItem or (info.numOwnerItems or 0) > 0
+            listings[#listings + 1] = { info.unitPrice, info.quantity, yours }
+        end
+    end
+    return Broker.MergeListings(listings)
+end
+
+-- Live listings of a non-commodity item (gear and the like). Bid-only
+-- auctions have no buyout and are left out.
+function Broker.ReadItemResults(itemKey)
+    local AH = C_AuctionHouse
+    if not (AH and AH.GetNumItemSearchResults and AH.GetItemSearchResultInfo) then return nil end
+    local listings = {}
+    for i = 1, AH.GetNumItemSearchResults(itemKey) or 0 do
+        local info = AH.GetItemSearchResultInfo(itemKey, i)
+        if info and info.buyoutAmount then
+            listings[#listings + 1] = { info.buyoutAmount, info.quantity or 1, info.containsOwnerItem == true }
+        end
+    end
+    return Broker.MergeListings(listings)
+end
+
+-- The listings to show for an item: live ones when we have them, else the
+-- latest scan's. Returns listings, a line saying where they're from, and
+-- whether more were left off.
+function Broker:SellListings(itemID)
+    local live = self.sellLive
+    if live and live.itemID == itemID then
+        return live.listings, "Live from the auction house", false
+    end
+    local prices = MF.Prices
+    local p = prices and prices:IsEnabled() and prices:GetPrice(itemID)
+    if not p then return {}, "Not in your scans at this house yet", false end
+    local listings = {}
+    for i, step in ipairs(p.ladder or {}) do listings[i] = { step[1], step[2], false } end
+    local age = p.lastSeen and Broker.Ago(time() - p.lastSeen) or "a while ago"
+    if #listings == 0 then return listings, "None listed at your last scan (" .. age .. ")", false end
+    return listings, "From your last scan, " .. age, p.ladderMore
+end
+
+-- One listing row, e.g. "20 at 1s 50c" (your own in blue).
+function Broker.ListingLine(listing)
+    local line = string.format("%d at %s", listing[2], Util.FormatMoney(listing[1]))
+    if listing[3] then return BLUE .. line .. " (yours)|r" end
+    return line
+end
+
+-- Your results -----------------------------------------------------------------
+
+-- Razzle's price for the item, for the top of the results column.
+function Broker:SellPriceLines(itemID)
+    local prices = MF.Prices
+    local p = prices and prices:IsEnabled() and prices:GetPrice(itemID)
+    if not (p and p.market) then return { "Market value: not known here yet" } end
+    local read = {}
+    if p.trend then read[#read + 1] = p.trend end
+    if p.confidence and prices.ConfidenceLabel then
+        read[#read + 1] = prices.ConfidenceLabel(p.confidence) .. " confidence"
+    end
+    local line = "Market value: " .. Util.FormatMoney(p.market)
+    if #read > 0 then line = line .. " (" .. table.concat(read, ", ") .. ")" end
+    local lines = { line }
+    local post = MF.Post
+    local suggestion = post and post:IsEnabled() and post:Suggest(itemID)
+    if suggestion then lines[#lines + 1] = "Razzle's price: " .. Util.FormatMoney(suggestion) .. " each" end
+    return lines
+end
+
+-- What your auction mail says about the item: summary lines, then recent
+-- records (each a line).
+function Broker:SellResultLines(itemID)
+    local history = MF.History
+    if not (history and history:IsEnabled()) then
+        return { GREY .. "Your results are off. Turn them on with /mf enable history.|r" }, {}
+    end
+    local s = history:ItemStats(itemID)
+    if not s then
+        return { GREY .. "No results for this yet. Check your mailbox after auctions end and I'll keep score.|r" }, {}
+    end
+    local lines = {}
+    if s.sold > 0 then
+        lines[#lines + 1] = string.format("Sold %d in %d %s%s", s.sold, s.soldListings,
+            s.soldListings == 1 and "listing" or "listings",
+            s.soldEach and (", ~" .. Util.FormatMoney(s.soldEach) .. " each") or "")
+    else
+        lines[#lines + 1] = "Nothing sold yet"
+    end
+    local finished = s.soldListings + s.expired + s.cancelled
+    if finished > 0 then
+        lines[#lines + 1] = string.format("Sell-through: %d of %d (%d%%)", s.soldListings, finished,
+            math.floor((s.sellThrough or 0) * 100 + 0.5))
+    end
+    if s.expired + s.cancelled > 0 then
+        lines[#lines + 1] = string.format("Expired %d, cancelled %d", s.expired, s.cancelled)
+    end
+    if s.bought > 0 then
+        lines[#lines + 1] = string.format("Bought %d%s", s.bought,
+            s.boughtEach and (" at ~" .. Util.FormatMoney(s.boughtEach)) or "")
+    end
+    if s.lastSold then lines[#lines + 1] = "Last sold " .. Broker.Ago(time() - s.lastSold) end
+    local recent = {}
+    for _, r in ipairs(history:ItemRecords(itemID, self.SELL_RECENT_ROWS)) do
+        local text = string.format("%s%s|r %d", TYPE_COLOR[r.type] or "", r.type, r.n or 1)
+        if r.type == "sold" and r.money then
+            text = text .. " for " .. Util.FormatMoney(r.money)
+        elseif r.type == "bought" and r.price then
+            text = text .. " for " .. Util.FormatMoney(r.price)
+        end
+        recent[#recent + 1] = text .. GREY .. ", " .. Broker.Ago(time() - (r.at or time())) .. "|r"
+    end
+    return lines, recent
+end
+
+-- What Razzle says about an item picked away from the sell slot.
+function Broker:SellLine(itemID)
+    local name = Broker.ItemName(itemID)
+    local prices = MF.Prices
+    local p = prices and prices:IsEnabled() and prices:GetPrice(itemID)
+    local line
+    if p and p.market then
+        line = name .. ": worth about " .. Util.FormatMoney(p.market) .. "."
+        if p.minBuyout then line = line .. " Cheapest at my last scan: " .. Util.FormatMoney(p.minBuyout) .. "." end
+    else
+        line = name .. "? I've got no steady price for it here yet."
+    end
+    local history = MF.History
+    local record = history and history:IsEnabled() and history:Line(itemID)
+    if record then line = line .. " Your record: " .. record .. "." end
+    local scan = MF.Scan
+    if not (scan and scan:IsAuctionHouseOpen()) then
+        line = line .. " Bring it to the auction house and I'll set it up."
+    end
+    return line
+end
+
+-- Actions ----------------------------------------------------------------------
+
+-- The Sell tab now looks at this item (from a click, or from anything put
+-- in Blizzard's sell slot). Another item's live listings are dropped.
+function Broker:SelectSellItem(itemID)
+    if not itemID then return end
+    if self.sellItem ~= itemID then
+        self.sellItem = itemID
+        if self.sellLive and self.sellLive.itemID ~= itemID then self.sellLive = nil end
+    end
+    if self.tab == "Sell" and self.frame and self.frame:IsShown() then self:RefreshSell() end
+end
+
+-- A bag row was clicked. At the auction house the item also goes into
+-- Blizzard's sell slot, priced; posting is still the player's click.
+function Broker:PickSellItem(itemID)
+    local f = self.frame
+    if not (f and itemID) then return end
+    self:SelectSellItem(itemID)
+    local scan, post = MF.Scan, MF.Post
+    local line
+    if scan and scan:IsAuctionHouseOpen() then
+        if post and post:IsEnabled() then
+            line = post:SellFromBags(itemID)
+        else
+            line = "Selling's off (/mf enable post). Drag " .. Broker.ItemName(itemID)
+                .. " into the sell slot yourself."
+        end
+    end
+    f.speech:SetText(line or self:SellLine(itemID))
+    self:RefreshSell()
+end
+
+-- A listing row was clicked: its price goes in Blizzard's price box, if the
+-- sell slot holds this item. Rounded to silver like Razzle's own price.
+function Broker:MatchListing(price)
+    local f = self.frame
+    if not (f and price and self.sellItem) then return end
+    local scan, post = MF.Scan, MF.Post
+    local name = Broker.ItemName(self.sellItem)
+    if not (scan and scan:IsAuctionHouseOpen()) then
+        f.speech:SetText("Meet me at the auction house and I'll put that price in for you.")
+        return
+    end
+    local sellFrame = post and post:IsEnabled() and post:SellFrameFor(self.sellItem)
+    local input = sellFrame and sellFrame.PriceInput
+    if not (input and input.SetAmount) then
+        f.speech:SetText("Pick " .. name .. " from your bags first, so it's in the sell slot.")
+        return
+    end
+    local amount = post.RoundPrice(price)
+    input:SetAmount(amount)
+    local line = "Matched at " .. Util.FormatMoney(amount) .. " each"
+    if amount ~= price then line = line .. " (whole silver)" end
+    f.speech:SetText(line .. ". Click Post when you're happy, boss.")
+end
+
+-- Frames -----------------------------------------------------------------------
+
+local function column(page, x, width, title)
+    local col = CreateFrame("Frame", nil, page)
+    col:SetPoint("TOPLEFT", page, "TOPLEFT", x, 0)
+    col:SetPoint("BOTTOMLEFT", page, "BOTTOMLEFT", x, 0)
+    col:SetWidth(width)
+    local header = Broker.NewText(col, "GameFontNormal", width)
+    header:SetPoint("TOPLEFT", col, "TOPLEFT", 2, 0)
+    header:SetText(title)
+    col.header = header
+    return col
+end
+
+local function textLines(col, anchor, count, width, gap)
+    local lines, previous = {}, anchor
+    for i = 1, count do
+        local line = Broker.NewText(col, "GameFontHighlightSmall", width)
+        line:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, -(gap or 3))
+        if line.SetWordWrap then line:SetWordWrap(false) end
+        lines[i], previous = line, line
+    end
+    return lines
+end
+
+function Broker:BuildSellPage(f, page)
+    if not page then return end
+    local W = 188
+
+    -- Your bags.
+    local bags = column(page, 0, W, "Your bags")
+    f.sellBagLines, f.sellBagRows = {}, {}
+    local previous = bags.header
+    for i = 1, self.SELL_BAG_ROWS do
+        local row, line = Broker.NewItemRow(bags, "Click to look; at the AH it goes in the sell slot", W)
+        row:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, -3)
+        row:SetScript("OnClick", function(button)
+            if button.itemID then Broker:PickSellItem(button.itemID) end
+        end)
+        f.sellBagLines[i], f.sellBagRows[i] = line, row
+        previous = row
+    end
+    f.sellNext = CreateFrame("Button", nil, bags, "UIPanelButtonTemplate")
+    f.sellNext:SetSize(24, 20)
+    f.sellNext:SetPoint("BOTTOMRIGHT", bags, "BOTTOMRIGHT", 0, 0)
+    f.sellNext:SetText(">")
+    f.sellNext:SetScript("OnClick", function() Broker:TurnSellPage(1) end)
+    f.sellPrev = CreateFrame("Button", nil, bags, "UIPanelButtonTemplate")
+    f.sellPrev:SetSize(24, 20)
+    f.sellPrev:SetPoint("RIGHT", f.sellNext, "LEFT", -2, 0)
+    f.sellPrev:SetText("<")
+    f.sellPrev:SetScript("OnClick", function() Broker:TurnSellPage(-1) end)
+
+    -- Competing listings.
+    local listings = column(page, W + 12, W, "Competing listings")
+    f.sellItemName = Broker.NewText(listings, "GameFontHighlight", W)
+    f.sellItemName:SetPoint("TOPLEFT", listings.header, "BOTTOMLEFT", 0, -4)
+    if f.sellItemName.SetWordWrap then f.sellItemName:SetWordWrap(false) end
+    f.sellSource = Broker.NewText(listings, "GameFontDisableSmall", W)
+    f.sellSource:SetPoint("TOPLEFT", f.sellItemName, "BOTTOMLEFT", 0, -2)
+    f.sellListLines, f.sellListRows = {}, {}
+    previous = f.sellSource
+    for i = 1, self.SELL_LIST_ROWS do
+        local row, line = Broker.NewItemRow(listings, "Click to put this price in the sell slot", W)
+        row:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, -3)
+        row:SetScript("OnClick", function(button)
+            if button.price then Broker:MatchListing(button.price) end
+        end)
+        f.sellListLines[i], f.sellListRows[i] = line, row
+        previous = row
+    end
+
+    -- Your results.
+    local results = column(page, 2 * (W + 12), W + 8, "Your results")
+    f.sellPriceLines = textLines(results, results.header, 2, W + 8, 4)
+    f.sellResultLines = textLines(results, f.sellPriceLines[2], 5, W + 8, 3)
+    f.sellResultLines[1]:ClearAllPoints()
+    f.sellResultLines[1]:SetPoint("TOPLEFT", f.sellPriceLines[2], "BOTTOMLEFT", 0, -10)
+    if f.sellResultLines[1].SetWordWrap then f.sellResultLines[1]:SetWordWrap(true) end
+    local recentHeader = Broker.NewText(results, "GameFontNormalSmall", W + 8)
+    recentHeader:SetPoint("TOPLEFT", f.sellResultLines[5], "BOTTOMLEFT", 0, -10)
+    recentHeader:SetText("Latest")
+    f.sellRecentLines = textLines(results, recentHeader, self.SELL_RECENT_ROWS, W + 8, 3)
+
+    local hint = Broker.NewText(results, "GameFontDisableSmall", W + 8)
+    hint:SetPoint("BOTTOMLEFT", results, "BOTTOMLEFT", 2, 0)
+    hint:SetText("Posting is always your click on Blizzard's Post button.")
+end
+
+function Broker:TurnSellPage(delta)
+    self.sellPage = (self.sellPage or 1) + delta
+    self:RefreshSell()
+end
+
+local function fill(lines, texts)
+    for i, line in ipairs(lines) do line:SetText(texts[i] or "") end
+end
+
+function Broker:RefreshSell()
+    local f = self.frame
+    if not (f and f.sellBagLines) then return end
+
+    -- Bags, paged; names still loading wait, like the other lists.
+    local shown, loading = {}, 0
+    self.sellWaitingFor = {}
+    for _, item in ipairs(self:BagRows()) do
+        if item.label then
+            shown[#shown + 1] = item
+        else
+            loading = loading + 1
+            self.sellWaitingFor[item.itemID] = true
+        end
+    end
+    local rows = #f.sellBagLines
+    local pages = math.max(1, math.ceil(#shown / rows))
+    local page = math.min(math.max(self.sellPage or 1, 1), pages)
+    self.sellPage = page
+    if pages > 1 then
+        f.sellPrev:Show()
+        f.sellNext:Show()
+        if page > 1 then f.sellPrev:Enable() else f.sellPrev:Disable() end
+        if page < pages then f.sellNext:Enable() else f.sellNext:Disable() end
+    else
+        f.sellPrev:Hide()
+        f.sellNext:Hide()
+    end
+    local first = (page - 1) * rows
+    for i, line in ipairs(f.sellBagLines) do
+        local item = shown[first + i]
+        f.sellBagRows[i].itemID = item and item.itemID
+        if item then
+            local text = self.BagLine(item)
+            if item.itemID == self.sellItem then text = GOLD .. ">|r " .. text end
+            line:SetText(text)
+        elseif first + i == #shown + 1 and loading > 0 then
+            line:SetText(GREY .. "Looking up " .. loading .. " more...|r")
+        elseif i == 1 and first == 0 then
+            line:SetText("Nothing in your bags I can sell.")
+        else
+            line:SetText("")
+        end
+    end
+
+    -- Listings and results for the picked item.
+    local itemID = self.sellItem
+    for _, row in ipairs(f.sellListRows) do row.itemID, row.price = nil, nil end
+    if not itemID then
+        f.sellItemName:SetText(GREY .. "Pick something from your bags|r")
+        f.sellSource:SetText("")
+        fill(f.sellListLines, {})
+        fill(f.sellPriceLines, {})
+        fill(f.sellResultLines, {})
+        fill(f.sellRecentLines, {})
+        return
+    end
+    f.sellItemName:SetText(Broker.ItemLabel(itemID) or Broker.ItemName(itemID))
+    local listings, source, more = self:SellListings(itemID)
+    f.sellSource:SetText(source)
+    local n = #f.sellListLines
+    for i, line in ipairs(f.sellListLines) do
+        local listing = listings[i]
+        if listing and i == n and (#listings > n or more) then
+            line:SetText(GREY .. "...and more|r")
+        elseif listing then
+            line:SetText(self.ListingLine(listing))
+            f.sellListRows[i].itemID, f.sellListRows[i].price = itemID, listing[1]
+        else
+            line:SetText("")
+        end
+    end
+    fill(f.sellPriceLines, self:SellPriceLines(itemID))
+    local summary, recent = self:SellResultLines(itemID)
+    fill(f.sellResultLines, summary)
+    fill(f.sellRecentLines, recent)
+end
+
+-- Events -----------------------------------------------------------------------
+
+-- Search results Blizzard's sell frame (or the player) asked for. Only the
+-- item the Sell tab is looking at is read; nothing here sends a search.
+function Broker:COMMODITY_SEARCH_RESULTS_UPDATED(_, itemID)
+    if not itemID or itemID ~= self.sellItem then return end
+    local listings = Broker.ReadCommodityResults(itemID)
+    if not listings then return end
+    self.sellLive = { itemID = itemID, listings = listings }
+    if self.tab == "Sell" and self.frame and self.frame:IsShown() then self:RefreshSell() end
+end
+
+function Broker:ITEM_SEARCH_RESULTS_UPDATED(_, itemKey)
+    local itemID = type(itemKey) == "table" and itemKey.itemID
+    if not itemID or itemID ~= self.sellItem then return end
+    local listings = Broker.ReadItemResults(itemKey)
+    if not listings then return end
+    self.sellLive = { itemID = itemID, listings = listings }
+    if self.tab == "Sell" and self.frame and self.frame:IsShown() then self:RefreshSell() end
+end
+
+-- Older clients may not know these events; registering an unknown one is
+-- an error, so each is tried on its own.
+function Broker:RegisterSellEvents()
+    for _, event in ipairs({ "COMMODITY_SEARCH_RESULTS_UPDATED", "ITEM_SEARCH_RESULTS_UPDATED" }) do
+        pcall(self.RegisterEvent, self, event)
+    end
+end

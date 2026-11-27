@@ -23,5 +23,6 @@ Modules\History.lua
 Modules\Outside.lua
 Modules\Flip.lua
 Modules\Broker.lua
+Modules\BrokerSell.lua
 
 Core\Core.lua

@@ -358,6 +358,22 @@ function History:Recent(limit)
     return out
 end
 
+-- Your newest records for one item in the current market scope (within
+-- keepDays), newest first.
+function History:ItemRecords(itemID, limit)
+    itemID = tonumber(itemID)
+    local out = {}
+    if not itemID then return out end
+    local scope = Util.GetMarketScope()
+    local since = time() - self.db.global.keepDays * DAY
+    for _, r in ipairs(self.db.global.records) do
+        if r.id == itemID and inScope(r, scope, since) then out[#out + 1] = r end
+    end
+    table.sort(out, function(a, b) return (a.at or 0) > (b.at or 0) end)
+    while #out > (limit or 5) do table.remove(out) end
+    return out
+end
+
 -- One line about your own results with an item, for tooltips and Razzle,
 -- or nil when you have none.
 function History:Line(itemID)

@@ -59,6 +59,21 @@ client may use (`ChatEdit_InsertLink`, `ChatFrameUtil.InsertLink`,
 `HandleModifiedItemClick`). Flip never
 buys or posts: each purchase and each post is the player's own click.
 
+Razzle's **Sell** tab widens the window to three columns side by side,
+after AuctioneerModern's Post tab: **Your bags** (sellable items, most
+valuable first, paged), **Competing listings** for the picked item, and
+**Your results** (market value and Razzle's price, then what History has
+from your auction mail: sold, sell-through, expired, bought, the latest
+records). Clicking a bag row at the auction house puts the item in
+Blizzard's sell slot the same way shift-clicking does (below), so
+Blizzard's own sell frame searches for its listings; the tab reads those
+results (`COMMODITY_SEARCH_RESULTS_UPDATED`, `ITEM_SEARCH_RESULTS_UPDATED`)
+and shows them live, your own marked, and until then shows the latest
+scan's cheapest listings. Clicking a listing puts its price (whole silver)
+in Blizzard's price box, only when the sell slot holds that item. Whatever
+goes in the sell slot by hand is followed too. The tab never sends a
+search, never posts: the Post click is the player's.
+
 Post hooks Blizzard's sell frames (`ItemSellFrame`, `CommoditiesSellFrame`).
 When an item goes in, it sets the price box to the market value, rounded to
 the nearest silver, one frame after Blizzard sets its default. It never calls
