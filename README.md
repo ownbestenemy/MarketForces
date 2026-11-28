@@ -68,7 +68,7 @@ game with `/dump select(4, GetBuildInfo())` and update `## Interface:` in
 | `/mf scan force` | Try a scan before the 15 minute wait is up (same as shift-clicking Full Scan); once a minute at most |
 | `/mf autofill` | Toggle Razzle filling in sell prices with market value |
 | `/mf shiftsell` | Toggle shift-clicking a bag item at the auction house to put it up for sale |
-| `/mf duration 12\|24\|48` | Sell duration Razzle sets up (24 hours by default) |
+| `/mf duration <hours>` | Sell duration Razzle sets up, in the hours Blizzard's dropdown offers (its middle choice by default) |
 | `/mf price <item>` | Market value and cheapest current listing (shift-click an item, or give its ID) |
 | `/mf tooltip` | Turn prices on item tooltips on or off |
 | `/mf advice` | Turn Razzle's buy / auction / vendor advice on tooltips on or off |

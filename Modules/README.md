@@ -99,9 +99,12 @@ Shift-clicking a bag item while the auction house is open puts it up for
 sale: Post finds it in the bags, calls Blizzard's `AuctionHouseFrame:SetPostItem`
 (the same as right-clicking it on the Sell tab), and on the next frame sets
 the quantity and duration. The quantity is everything you hold, capped at
-what other sellers list right now (at least one stack); the duration is 24
-hours unless changed with `/mf duration`, also saved to Blizzard's
-`auctionHouseDurationDropdown` default. It's skipped while a chat box, the
+what other sellers list right now (at least one stack); the duration is
+Blizzard's middle choice unless changed with `/mf duration <hours>`, also
+saved to Blizzard's `auctionHouseDurationDropdown` default. Durations are
+named from the client's own strings (`AUCTION_DURATION_ONE` etc.; Forever's
+dropdown shows 8 hours where retail shows 24), and if the dropdown ends up
+on another duration, Razzle says the one it shows. It's skipped while a chat box, the
 AH search box or one of Razzle's boxes has focus, so shift-click still
 links items there. Razzle says what it set up; the player clicks Post.
 `/mf shiftsell` turns it off.
