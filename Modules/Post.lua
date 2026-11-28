@@ -1,9 +1,21 @@
 -- MarketForces Post module.
 --
 -- When you put an item in the auction house's sell slot, Razzle fills in
--- the price box with the item's smoothed market value (Mark's choice: steady
--- prices, no racing undercutters). You check it and click Blizzard's own
--- Post button; this module never posts, buys or cancels anything.
+-- the price box using the pricing method you picked (default: the item's
+-- smoothed market value, Mark's choice: steady prices, no racing
+-- undercutters). The methods, after the ones seller addons offer:
+--   market    Razzle's smoothed market value (see Prices.lua)
+--   median    the median unit price of the listings
+--   trimmed   the average unit price with the cheapest and dearest 10% of
+--             units left out
+--   undercut  the highest whole silver below the cheapest other listing,
+--             but never under 80% of market value (undercutFloor)
+--   match     the cheapest other listing (rounded down to whole silver)
+--   history   what your own sales averaged (from your auction mail)
+-- Listings are live from the auction house when Razzle's Sell tab has them,
+-- otherwise the latest scan's. A method with no number yet falls back to
+-- market value. You check it and click Blizzard's own Post button; this
+-- module never posts, buys or cancels anything.
 --
 -- It also sends MF_POST_ITEM_SELECTED(itemID, suggestion) so Razzle's window
 -- can talk about the item.
@@ -19,6 +31,8 @@ local Post = MF:NewModule("Post", {
         fillPrice = true, -- put the suggestion into the price box
         shiftSell = true, -- shift-click a bag item at the AH to put it up for sale
         duration = 2,     -- 1 = 12 hours, 2 = 24 hours, 3 = 48 hours
+        method = "market", -- pricing method, see the header
+        undercutFloor = 0.8, -- undercut never goes below this share of market value
     },
 })
 MF.Post = Post
@@ -33,15 +47,74 @@ function Post.RoundPrice(copper)
     return rounded
 end
 
--- The suggested buyout per unit for an item at the current auction house,
--- or nil when there's no market value yet. Rounded to the nearest silver
--- (at least 1s), since the sell frames don't take copper.
-function Post:Suggest(itemID)
+-- Pricing methods in the order Razzle lists them.
+Post.METHODS = {
+    { key = "market", label = "Market value" },
+    { key = "median", label = "Median" },
+    { key = "trimmed", label = "Trimmed mean" },
+    { key = "undercut", label = "Undercut" },
+    { key = "match", label = "Match cheapest" },
+    { key = "history", label = "Your sales" },
+}
+local METHOD_LABEL = {}
+for _, m in ipairs(Post.METHODS) do METHOD_LABEL[m.key] = m.label end
+Post.METHOD_LABEL = METHOD_LABEL
+
+-- Every method's price per unit (raw copper, nil when it has no number)
+-- for an item at the current auction house. listings: optional live
+-- { unitPrice, units, yours } listings; without them the latest scan's
+-- numbers are used. Returns the prices and Prices:GetPrice's entry.
+function Post:PriceOptions(itemID, listings)
+    local out = {}
     local prices = MF.Prices
-    if not (prices and prices:IsEnabled() and itemID) then return nil end
-    local p = prices:GetPrice(itemID)
-    if not (p and p.market) then return nil end
-    return Post.RoundPrice(p.market), p
+    local p = prices and prices:IsEnabled() and itemID and prices:GetPrice(itemID) or nil
+    local market = p and p.market
+    out.market = market
+    local cheapest
+    if listings and #listings > 0 then
+        local others = {}
+        for _, l in ipairs(listings) do
+            if not l[3] then others[#others + 1] = l end
+        end
+        out.median = MF.Prices.Median(listings)
+        out.trimmed = MF.Prices.TrimmedMean(listings)
+        for _, l in ipairs(others) do
+            if not cheapest or l[1] < cheapest then cheapest = l[1] end
+        end
+    elseif p then
+        out.median, out.trimmed, cheapest = p.median, p.trimmed, p.minBuyout
+    end
+    if cheapest then
+        -- Whole silver, since the sell frames take no copper: match is the
+        -- cheapest rounded down, undercut the highest whole silver below
+        -- it, floored (rounded up to whole silver) so a price war can't
+        -- drag us under a share of market value.
+        out.match = math.max(math.floor(cheapest / SILVER) * SILVER, SILVER)
+        local under = math.ceil(cheapest / SILVER) * SILVER - SILVER
+        local minimum = market and math.ceil(market * (self.db.global.undercutFloor or 0) / SILVER) * SILVER or 0
+        out.undercut = math.max(under, minimum, SILVER)
+        out.undercutFloored = under < minimum
+    end
+    local history = MF.History
+    local stats = history and history:IsEnabled() and itemID and history:ItemStats(itemID)
+    out.history = stats and stats.soldEach
+    return out, p
+end
+
+-- The suggested buyout per unit for an item at the current auction house,
+-- by the chosen pricing method (falling back to market value), rounded to
+-- the nearest silver (at least 1s) since the sell frames don't take copper.
+-- Returns the price (nil when there's nothing to go on), Prices' entry, and
+-- the method used.
+function Post:Suggest(itemID, listings)
+    if not itemID then return nil end
+    local options, p = self:PriceOptions(itemID, listings)
+    local method = self.db.global.method or "market"
+    if not METHOD_LABEL[method] then method = "market" end
+    local value = options[method]
+    if not value then method, value = "market", options.market end
+    if not value then return nil, p end
+    return Post.RoundPrice(value), p, method
 end
 
 local function itemIDFrom(itemLocation)
@@ -263,6 +336,17 @@ function Post:OnInitialize()
         Post.db.global.shiftSell = not Post.db.global.shiftSell
         MF:Print("Shift-click", Post.db.global.shiftSell and "puts bag items up for sale at the auction house"
             or "no longer puts items up for sale")
+    end)
+    MF:RegisterSlashCommand("pricing",
+        "How Razzle prices sales: /mf pricing market, median, trimmed, undercut, match or history", function(args)
+        local key = (args or ""):lower():match("^%s*(%S*)")
+        if not METHOD_LABEL[key] then
+            MF:Print("Use /mf pricing market, median, trimmed, undercut, match or history. Now:",
+                METHOD_LABEL[Post.db.global.method] or METHOD_LABEL.market)
+            return
+        end
+        Post.db.global.method = key
+        MF:Print("Razzle will price sales by", METHOD_LABEL[key])
     end)
     MF:RegisterSlashCommand("duration", "Sell duration: /mf duration 12, 24 or 48", function(args)
         local hours = tonumber(args)

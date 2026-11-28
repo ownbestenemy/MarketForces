@@ -18,6 +18,11 @@ check(H.plain(Broker.ListingLine({ 150, 10, true })) == "10 at 1s 50c (yours)", 
 check(H.plain(Broker.ListingLine({ 200, 8, false })) == "8 at 2s", "listing line")
 check(H.plain(Broker.VsMarket(88, 100)) == "-12%" and H.plain(Broker.VsMarket(108, 100)) == "+8%",
     "percent under and over market")
+check(Broker.StackSplit(24, 20) == "24 = 1 stack of 20 + 4" and Broker.StackSplit(40, 20) == "40 = 2 stacks of 20",
+    "stack split")
+check(Broker.StackSplit(4, 20) == nil and Broker.StackSplit(3, 1) == nil, "no split under a stack or for one-offs")
+local opts = MF.Post:PriceOptions(nil, { { 1050, 5 }, { 1200, 5 }, { 900, 2, true } })
+check(opts.match == 1000 and opts.undercut == 1000 and opts.median == 1050, "options from listings, yours skipped")
 check(Broker.VsMarket(100, 100) == "0%" and Broker.VsMarket(100, nil) == "", "at market; no market")
 check(Broker.VsMarket(88, 100):find("^|cff33ff33") and Broker.VsMarket(108, 100):find("^|cffff9933"),
     "under in green, over in orange")
@@ -35,6 +40,7 @@ H.fire("REPLICATE_ITEM_LIST_UPDATE")
 H.runTimers()
 
 H.commodities = { [2589] = true, [2770] = true }
+H.stackSizes = { [2589] = 20, [2770] = 20 }
 H.bags = { [0] = {
     { itemID = 2589, stackCount = 20 },
     { itemID = 2770, stackCount = 4 },
@@ -78,8 +84,24 @@ check(H.plain(frame.sellListLines[1].text) == "5 at 1s 50c", "cheapest scan list
 local linenMarket = MF.Prices:GetPrice(2589).market
 check(frame.sellListPcts[1].text == Broker.VsMarket(150, linenMarket) and frame.sellListPcts[1].text ~= "",
     "vs market shown beside the scan listing")
-check(H.plain(frame.sellPriceLines[1].text):find("^Market value: "), "market value shown")
-check(H.plain(frame.sellPriceLines[2].text):find("^Razzle's price: "), "Razzle's price shown")
+-- Pricing: every method per unit and per stack of 20, market in use.
+local function row(i)
+    local r = frame.sellMethodRows[i]
+    return H.plain(r.label.text), H.plain(r.each.text), H.plain(r.stack.text)
+end
+local function rowIs(i, label, each, stack, what)
+    local l, e, st = row(i)
+    check(l == label and e == each and st == stack, what .. " (got " .. l .. " | " .. e .. " | " .. st .. ")")
+end
+check(frame.sellHeadEach.text == "per unit" and frame.sellHeadStack.text == "per 20", "column heads")
+rowIs(1, "> Market value", "2s", "40s", "market value in use, rounded to silver")
+rowIs(2, "Median", "3s", "60s", "median of the scan")
+rowIs(3, "Trimmed mean", "3s", "60s", "trimmed mean of the scan")
+rowIs(4, "Undercut (floor)", "2s", "40s", "undercut held at 80% of market")
+rowIs(5, "Match cheapest", "1s", "20s", "match rounds the cheapest down")
+rowIs(6, "Your sales", "2s", "40s", "your sales' average")
+check(H.plain(frame.sellBreakdown[1].text) == "Your 20 at 2s: 40s, 38s after the cut", "what your copies bring")
+check(H.plain(frame.sellBreakdown[2].text) == "20 = 1 stack of 20", "stacks")
 check(H.plain(frame.sellResultLines[1].text) == "Sold 15 in 2 listings, ~2s each", "sales summed for this market only")
 check(H.plain(frame.sellResultLines[2].text) == "Sell-through: 2 of 3 (67%)", "sell-through")
 check(H.plain(frame.sellResultLines[3].text) == "Expired 1, cancelled 0", "expired count")
@@ -105,6 +127,26 @@ check(H.plain(frame.sellListLines[1].text) == "15 at 1s 40c", "live listings mer
 check(H.plain(frame.sellListLines[2].text) == "4 at 1s 80c (yours)", "your live listing marked")
 check(frame.sellListPcts[2].text == Broker.VsMarket(180, linenMarket), "vs market for live listings")
 check(frame.sellListPcts[3].text == "", "empty rows have no percent")
+rowIs(2, "Median", "1s", "20s", "median of the live listings")
+rowIs(5, "Match cheapest", "1s", "20s", "match ignores your own listing")
+
+-- Pick a pricing method: remembered, and put in the sell slot holding linen.
+sell.PriceInput.amount = 0
+frame.sellMethodRows[2]:Click()
+check(MF.Post.db.global.method == "median", "median chosen")
+check(sell.PriceInput.amount == 100, "median price put in the sell slot")
+check(H.plain(frame.speech.text) == "Pricing by median from now on. Set 1s each. Click Post when you're happy, boss.",
+    "Razzle says so")
+rowIs(1, "Market value", "2s", "40s", "market no longer marked")
+rowIs(2, "> Median", "1s", "20s", "median marked")
+check(H.plain(frame.sellBreakdown[1].text) == "Your 20 at 1s: 20s, 19s after the cut", "breakdown follows the method")
+frame.sellMethodRows[1]:Click()
+check(MF.Post.db.global.method == "market" and sell.PriceInput.amount == 200, "back to market value")
+H.slash("pricing trimmed")
+check(MF.Post.db.global.method == "trimmed", "/mf pricing sets the method")
+H.slash("pricing nonsense")
+check(MF.Post.db.global.method == "trimmed" and H.chatHas("Now: Trimmed mean"), "/mf pricing explains itself")
+H.slash("pricing market")
 
 -- Click a listing: its price goes in Blizzard's price box (whole silver).
 sell.PriceInput.amount = 0
@@ -119,6 +161,14 @@ H.runTimers()
 check(Broker.sellItem == 2770 and Broker.sellLive == nil, "tab follows the sell slot; old live listings dropped")
 check(H.plain(frame.sellItemName.text) == "Copper Ore", "ore shown")
 check(H.plain(frame.sellResultLines[1].text):find("No results for this yet"), "no results for ore")
+rowIs(6, "Your sales", "-", "", "no sales: no number")
+frame.sellMethodRows[6]:Click()
+check(H.plain(frame.speech.text):find("Your sales has no number for Copper Ore yet, so it's market value", 1, true),
+    "falls back to market and says so")
+check(sell.PriceInput.amount == 10000, "market value used instead")
+rowIs(6, "> Your sales", "-", "", "your choice stays marked")
+check(H.plain(frame.sellBreakdown[1].text) == "Market value until your sales has a number", "breakdown says why")
+frame.sellMethodRows[1]:Click()
 sell.PriceInput.amount = 7
 frame.sellListRows[1]:Click()
 check(sell.PriceInput.amount == 10000, "ore's own listing matched into ore's slot")

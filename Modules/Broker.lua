@@ -249,13 +249,15 @@ local function newItemBox(parent, name, onEnter)
 end
 
 Broker.TABS = { "Bargains", "Flips", "Sell" }
-Broker.WIDTH, Broker.WIDE = 320, 620 -- the Sell tab's three columns need the wide window
+Broker.WIDTH, Broker.WIDE = 320, 680 -- the Sell tab's three columns need the wide window
+Broker.HEIGHT, Broker.TALL = 480, 580
+Broker.SELL_PRICING_WIDTH = 256
 Broker.FLIP_ROWS = 6
 
 function Broker:CreateWindow()
     if self.frame then return self.frame end
     local f = CreateFrame("Frame", "MarketForcesRazzleFrame", UIParent, "BasicFrameTemplateWithInset")
-    f:SetSize(self.WIDTH, 480)
+    f:SetSize(self.WIDTH, self.HEIGHT)
     f:SetFrameStrata("HIGH")
     f:SetClampedToScreen(true)
     f:EnableMouse(true)
@@ -412,6 +414,7 @@ function Broker:ShowTab(title)
         end
     end
     f:SetWidth(title == "Sell" and self.WIDE or self.WIDTH)
+    f:SetHeight(title == "Sell" and self.TALL or self.HEIGHT)
     if title == "Flips" then self:RefreshFlips() end
     if title == "Sell" and self.RefreshSell then self:RefreshSell() end
 end

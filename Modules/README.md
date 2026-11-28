@@ -75,9 +75,24 @@ in Blizzard's price box, only when the sell slot holds that item. Whatever
 goes in the sell slot by hand is followed too. The tab never sends a
 search, never posts: the Post click is the player's.
 
+The Sell tab's third column, **Pricing**, lists every pricing method's price
+per unit and per stack (the item's stack size), with the one in use marked:
+market value, median, trimmed mean (cheapest and dearest 10% of units left
+out), undercut (the highest whole silver below the cheapest other listing,
+never under 80% of market value), match cheapest (rounded down to whole
+silver) and your sales (your average sale price from History). Median,
+trimmed mean, undercut and match use the live listings when the tab has
+them, otherwise the latest scan's (Prices keeps each scan's median and
+trimmed mean). Click a method to price by it from now on (also
+`/mf pricing <method>`); if the sell slot holds the item, its price box
+gets the new price. A method with no number yet falls back to market
+value, and the tab says so. Below the methods: your copies in stacks
+(`24 = 1 stack of 20 + 4`) and what they'd bring before and after the 5%
+cut. Then your results from History.
+
 Post hooks Blizzard's sell frames (`ItemSellFrame`, `CommoditiesSellFrame`).
-When an item goes in, it sets the price box to the market value, rounded to
-the nearest silver, one frame after Blizzard sets its default. It never calls
+When an item goes in, it sets the price box to the chosen pricing method's
+price (market value by default), rounded to the nearest silver, one frame after Blizzard sets its default. It never calls
 a posting function: the Post click is always the player's. `/mf autofill`
 turns the fill-in off and leaves Razzle's advice.
 

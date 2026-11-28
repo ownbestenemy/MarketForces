@@ -99,7 +99,7 @@ local function newRegion(kind, name, parent)
     function r:CreateFontString() return newRegion("FontString", nil, self) end
     function r:CreateTexture() return newRegion("Texture", nil, self) end
     for _, method in ipairs({
-        "SetSize", "SetWidth", "SetFrameStrata", "SetFrameLevel", "SetClampedToScreen", "EnableMouse",
+        "SetSize", "SetWidth", "SetHeight", "SetFrameStrata", "SetFrameLevel", "SetClampedToScreen", "EnableMouse",
         "SetMovable", "RegisterForDrag", "StartMoving", "StopMovingOrSizing", "SetJustifyH", "SetWordWrap",
         "SetTexture", "SetAutoFocus", "ClearFocus",
     }) do
@@ -136,7 +136,8 @@ C_Item = {
         local sell = H.vendorPrices and H.vendorPrices[itemID]
         if not name and not sell then return nil end
         local icon = H.itemIcons and H.itemIcons[itemID] or 0
-        return name, nil, 1, 1, 1, "", "", 1, "", icon, sell or 0
+        local stack = H.stackSizes and H.stackSizes[itemID] or 1
+        return name, nil, 1, 1, 1, "", "", stack, "", icon, sell or 0
     end,
     RequestLoadItemDataByID = function(itemID)
         H.itemRequests = H.itemRequests or {}

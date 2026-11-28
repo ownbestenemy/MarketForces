@@ -28,6 +28,9 @@
 --       every price below market value (up to ladderSteps of them) plus the
 --       first one at or above it. bm = true when cheaper-than-market
 --       listings were left off the end. Flip advice reads these.
+--   md = the latest scan's median unit price, tm = its trimmed mean (the
+--       cheapest and dearest 10% of units dropped), both counted per unit.
+--       Post offers these as pricing methods for sellers.
 local _, MF = ...
 
 local Util = MF.Util
@@ -73,6 +76,53 @@ function Prices.ScanValue(listings, share)
         sum = sum + listing[1] * take
         units = units + take
         if units >= wanted then break end
+    end
+    return floor(sum / units + 0.5)
+end
+
+-- Listings { unitPrice, units } sorted cheapest first, and their units.
+local function sortedUnits(listings)
+    local sorted, total = {}, 0
+    for _, listing in ipairs(listings or {}) do
+        if listing[1] and (listing[2] or 0) > 0 then
+            sorted[#sorted + 1] = listing
+            total = total + listing[2]
+        end
+    end
+    table.sort(sorted, function(a, b) return a[1] < b[1] end)
+    return sorted, total
+end
+
+-- The median unit price, counting every unit listed, or nil.
+function Prices.Median(listings)
+    local sorted, total = sortedUnits(listings)
+    if total == 0 then return nil end
+    local middle, seen = math.ceil(total / 2), 0
+    for _, listing in ipairs(sorted) do
+        seen = seen + listing[2]
+        if seen >= middle then return listing[1] end
+    end
+end
+
+-- The average unit price with the cheapest and dearest `trim` share of
+-- units (default 10% each) left out, so a few silly listings either way
+-- don't move it. nil for no listings.
+function Prices.TrimmedMean(listings, trim)
+    local sorted, total = sortedUnits(listings)
+    if total == 0 then return nil end
+    trim = trim or 0.1
+    local skip = math.floor(total * trim)
+    local first, last = skip, total - skip -- keep units first+1 .. last
+    if last <= first then first, last = 0, total end
+    local seen, sum, units = 0, 0, 0
+    for _, listing in ipairs(sorted) do
+        local from, to = seen + 1, seen + listing[2]
+        local take = math.min(to, last) - math.max(from, first + 1) + 1
+        if take > 0 then
+            sum = sum + listing[1] * take
+            units = units + take
+        end
+        seen = to
     end
     return floor(sum / units + 0.5)
 end
@@ -206,6 +256,8 @@ function Prices:RecordSnapshot(snapshot)
         entry.q = item.quantity
         entry.t = snapshot.time
         entry.l = item.minBuyout
+        entry.md = Prices.Median(item.listings)
+        entry.tm = Prices.TrimmedMean(item.listings)
         local value = Prices.ScanValue(item.listings, share)
         if value then
             local day = entry.d[today]
@@ -227,6 +279,7 @@ function Prices:RecordSnapshot(snapshot)
             entry.q = 0
             entry.l = nil
             entry.b, entry.bm = nil, nil
+            entry.md, entry.tm = nil, nil
         end
     end
     self:Prune(snapshot.key, snapshot.time)
@@ -275,6 +328,7 @@ end
 --   market, minBuyout, quantity, lastSeen, days (days of history),
 --   trend ("rising"/"falling"/"steady"/nil) and trendChange (percent),
 --   confidence (0-1, see Prices.Confidence),
+--   median, trimmed = the latest scan's median and trimmed mean unit price,
 --   ladder = { {unitPrice, units}, ... } cheapest listings of the latest
 --   scan (see the header; may be empty), ladderMore = listings left off
 function Prices:GetPrice(itemID, key)
@@ -304,6 +358,8 @@ function Prices:GetPrice(itemID, key)
         ladderMore = entry.bm == true,
         market = blend(entry.d, dayNumber(time()), self.db.global.halfLifeDays, self.db.global.lowWeight),
         minBuyout = entry.l,
+        median = entry.md,
+        trimmed = entry.tm,
         quantity = entry.q or 0,
         lastSeen = entry.t,
         days = days,

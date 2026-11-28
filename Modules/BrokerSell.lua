@@ -12,9 +12,15 @@
 --                     how far each sits from market value (-12%, +8%).
 --                     Click one to put its price in
 --                     Blizzard's price box.
---   Your results      Razzle's price, then what your auction mail says
---                     about this item (History.lua): sold, sell-through,
---                     expired, bought, and the latest records.
+--   Pricing & results every pricing method's price (market value, median,
+--                     trimmed mean, undercut, match cheapest, your sales;
+--                     see Post.lua) per unit and per stack, the one in use
+--                     marked. Click one to price by it from now on (and, if
+--                     the sell slot holds the item, put its price in).
+--                     Below: your copies in stacks and what they'd bring
+--                     before and after the 5% cut, then what your auction
+--                     mail says about this item (History.lua): sold,
+--                     sell-through, expired, bought, and the latest records.
 --
 -- Razzle never posts. Posting stays your own click on Blizzard's Post
 -- button; this tab only fills in Blizzard's sell frame the way you could by
@@ -26,7 +32,8 @@ local Broker = MF.Broker
 
 Broker.SELL_BAG_ROWS = 13
 Broker.SELL_LIST_ROWS = 11
-Broker.SELL_RECENT_ROWS = 5
+Broker.SELL_RECENT_ROWS = 4
+Broker.AH_CUT = 0.05
 
 local HOUR, DAY = 60 * 60, 24 * 60 * 60
 local GOLD, BLUE, GREY = "|cffffd100", "|cff4fb3ff", "|cff808080"
@@ -129,23 +136,70 @@ end
 
 -- Your results -----------------------------------------------------------------
 
--- Razzle's price for the item, for the top of the results column.
-function Broker:SellPriceLines(itemID)
-    local prices = MF.Prices
-    local p = prices and prices:IsEnabled() and prices:GetPrice(itemID)
-    if not (p and p.market) then return { "Market value: not known here yet" } end
-    local read = {}
-    if p.trend then read[#read + 1] = p.trend end
-    if p.confidence and prices.ConfidenceLabel then
-        read[#read + 1] = prices.ConfidenceLabel(p.confidence) .. " confidence"
-    end
-    local line = "Market value: " .. Util.FormatMoney(p.market)
-    if #read > 0 then line = line .. " (" .. table.concat(read, ", ") .. ")" end
-    local lines = { line }
+local function stackSizeOf(itemID)
+    local getInfo = (C_Item and C_Item.GetItemInfo) or GetItemInfo
+    local size = getInfo and tonumber((select(8, getInfo(itemID))))
+    return (size and size > 1) and size or 1
+end
+
+-- "24 = 1 stack of 20 + 4", "40 = 2 stacks of 20", or nil for one-offs.
+function Broker.StackSplit(count, stackSize)
+    if not (count and stackSize and stackSize > 1 and count > 0) then return nil end
+    local stacks, rest = math.floor(count / stackSize), count % stackSize
+    if stacks == 0 then return nil end
+    local text = string.format("%d = %d %s of %d", count, stacks, stacks == 1 and "stack" or "stacks", stackSize)
+    if rest > 0 then text = text .. " + " .. rest end
+    return text
+end
+
+-- The pricing block for an item: { rows = { { key, label, each, stack,
+-- active (the one you chose) } }, stackSize, chosen, method (in use: the
+-- chosen one, or market value while it has no number), price (per unit), breakdown =
+-- lines about your copies, read = Razzle's read of the market, off =
+-- message when selling is off }. Prices per unit are whole silver, as the
+-- sell frames take them; per stack is that times the stack size.
+function Broker:SellPricing(itemID)
     local post = MF.Post
-    local suggestion = post and post:IsEnabled() and post:Suggest(itemID)
-    if suggestion then lines[#lines + 1] = "Razzle's price: " .. Util.FormatMoney(suggestion) .. " each" end
-    return lines
+    if not (post and post:IsEnabled()) then
+        return { rows = {}, stackSize = 1, breakdown = {}, off = "Selling's off. Turn it on with /mf enable post." }
+    end
+    local live = self.sellLive and self.sellLive.itemID == itemID and self.sellLive.listings or nil
+    local options, p = post:PriceOptions(itemID, live)
+    local price, _, method = post:Suggest(itemID, live)
+    local chosen = post.METHOD_LABEL[post.db.global.method] and post.db.global.method or "market"
+    local stackSize = stackSizeOf(itemID)
+    local out = { rows = {}, stackSize = stackSize, method = method, chosen = chosen, price = price, breakdown = {} }
+    for _, m in ipairs(post.METHODS) do
+        local each = options[m.key] and post.RoundPrice(options[m.key])
+        local label = m.label
+        if m.key == "undercut" and options.undercutFloored then label = label .. " (floor)" end
+        out.rows[#out.rows + 1] = {
+            key = m.key, label = label, each = each,
+            stack = each and stackSize > 1 and each * stackSize or nil,
+            active = m.key == chosen,
+        }
+    end
+    if price and method ~= chosen then
+        out.breakdown[1] = GREY .. "Market value until " .. post.METHOD_LABEL[chosen]:lower() .. " has a number|r"
+    end
+    local count = MF.Flip and MF.Flip.CountInBags(itemID) or 0
+    if price and count > 0 then
+        local total = price * count
+        out.breakdown[#out.breakdown + 1] = string.format("Your %d at %s: %s, %s after the cut", count,
+            Util.FormatMoney(price), Util.FormatMoney(total), Util.FormatMoney(math.floor(total * (1 - self.AH_CUT))))
+        out.breakdown[#out.breakdown + 1] = Broker.StackSplit(count, stackSize)
+    elseif not price then
+        out.breakdown[1] = GREY .. "No price to go on yet. A scan or two will teach me.|r"
+    end
+    if p and p.market then
+        local read = {}
+        if p.trend then read[#read + 1] = p.trend end
+        if p.confidence and MF.Prices.ConfidenceLabel then
+            read[#read + 1] = MF.Prices.ConfidenceLabel(p.confidence) .. " confidence"
+        end
+        if #read > 0 then out.read = "Market's " .. table.concat(read, ", ") end
+    end
+    return out
 end
 
 -- What your auction mail says about the item: summary lines, then recent
@@ -272,6 +326,33 @@ function Broker:MatchListing(price)
     f.speech:SetText(line .. ". Click Post when you're happy, boss.")
 end
 
+-- A pricing row was clicked: price by that method from now on, and if the
+-- sell slot holds this item, put the new price in its price box.
+function Broker:PickPriceMethod(key)
+    local f, post = self.frame, MF.Post
+    if not (f and post and post:IsEnabled() and post.METHOD_LABEL[key]) then return end
+    post.db.global.method = key
+    local label = post.METHOD_LABEL[key]
+    local line = "Pricing by " .. label:lower() .. " from now on."
+    local itemID = self.sellItem
+    if itemID then
+        local live = self.sellLive and self.sellLive.itemID == itemID and self.sellLive.listings or nil
+        local price, _, used = post:Suggest(itemID, live)
+        if price and used ~= key then
+            line = line .. " " .. label .. " has no number for " .. Broker.ItemName(itemID)
+                .. " yet, so it's market value for now."
+        end
+        local sellFrame = price and post:SellFrameFor(itemID)
+        local input = sellFrame and sellFrame.PriceInput
+        if input and input.SetAmount then
+            input:SetAmount(price)
+            line = line .. " Set " .. Util.FormatMoney(price) .. " each. Click Post when you're happy, boss."
+        end
+    end
+    f.speech:SetText(line)
+    self:RefreshSell()
+end
+
 -- Frames -----------------------------------------------------------------------
 
 local function column(page, x, width, title)
@@ -353,19 +434,60 @@ function Broker:BuildSellPage(f, page)
         previous = row
     end
 
-    -- Your results.
-    local results = column(page, 2 * (W + 12), W + 8, "Your results")
-    f.sellPriceLines = textLines(results, results.header, 2, W + 8, 4)
-    f.sellResultLines = textLines(results, f.sellPriceLines[2], 5, W + 8, 3)
-    f.sellResultLines[1]:ClearAllPoints()
-    f.sellResultLines[1]:SetPoint("TOPLEFT", f.sellPriceLines[2], "BOTTOMLEFT", 0, -10)
-    if f.sellResultLines[1].SetWordWrap then f.sellResultLines[1]:SetWordWrap(true) end
-    local recentHeader = Broker.NewText(results, "GameFontNormalSmall", W + 8)
-    recentHeader:SetPoint("TOPLEFT", f.sellResultLines[5], "BOTTOMLEFT", 0, -10)
-    recentHeader:SetText("Latest")
-    f.sellRecentLines = textLines(results, recentHeader, self.SELL_RECENT_ROWS, W + 8, 3)
+    -- Pricing & results.
+    local W3 = self.SELL_PRICING_WIDTH
+    local results = column(page, 2 * (W + 12), W3, "Pricing")
+    -- Column heads: method, per unit, per stack.
+    local function cells(parent)
+        local each = Broker.NewText(parent, "GameFontHighlightSmall", 70)
+        each:SetPoint("RIGHT", parent, "RIGHT", -76, 0)
+        each:SetJustifyH("RIGHT")
+        local stack = Broker.NewText(parent, "GameFontHighlightSmall", 72)
+        stack:SetPoint("RIGHT", parent, "RIGHT", 0, 0)
+        stack:SetJustifyH("RIGHT")
+        return each, stack
+    end
+    local heads = CreateFrame("Frame", nil, results)
+    heads:SetSize(W3, 14)
+    heads:SetPoint("TOPLEFT", results.header, "BOTTOMLEFT", 0, -4)
+    f.sellHeadEach, f.sellHeadStack = cells(heads)
+    f.sellHeadEach:SetText("per unit")
+    f.sellMethodRows = {}
+    previous = heads
+    for i = 1, #MF.Post.METHODS do
+        local row, line = Broker.NewItemRow(results, "Click to price by this from now on", W3)
+        row:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, -2)
+        row:SetScript("OnClick", function(button)
+            if button.method then Broker:PickPriceMethod(button.method) end
+        end)
+        row:SetScript("OnEnter", function(button)
+            if GameTooltip and button.method then
+                GameTooltip:SetOwner(button, "ANCHOR_RIGHT")
+                GameTooltip:AddLine(MF.Post.METHOD_LABEL[button.method])
+                GameTooltip:AddLine("Click to price by this from now on.", 0.5, 0.8, 1)
+                GameTooltip:Show()
+            end
+        end)
+        line:SetWidth(W3 - 150)
+        row.label = line
+        row.each, row.stack = cells(row)
+        f.sellMethodRows[i] = row
+        previous = row
+    end
+    f.sellBreakdown = textLines(results, previous, 4, W3, 3)
+    f.sellBreakdown[1]:ClearAllPoints()
+    f.sellBreakdown[1]:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, -6)
 
-    local hint = Broker.NewText(results, "GameFontDisableSmall", W + 8)
+    local resultsHeader = Broker.NewText(results, "GameFontNormal", W3)
+    resultsHeader:SetPoint("TOPLEFT", f.sellBreakdown[4], "BOTTOMLEFT", 0, -8)
+    resultsHeader:SetText("Your results")
+    f.sellResultLines = textLines(results, resultsHeader, 5, W3, 3)
+    local recentHeader = Broker.NewText(results, "GameFontNormalSmall", W3)
+    recentHeader:SetPoint("TOPLEFT", f.sellResultLines[5], "BOTTOMLEFT", 0, -6)
+    recentHeader:SetText("Latest")
+    f.sellRecentLines = textLines(results, recentHeader, self.SELL_RECENT_ROWS, W3, 3)
+
+    local hint = Broker.NewText(results, "GameFontDisableSmall", W3)
     hint:SetPoint("BOTTOMLEFT", results, "BOTTOMLEFT", 2, 0)
     hint:SetText("Posting is always your click on Blizzard's Post button.")
 end
@@ -432,7 +554,7 @@ function Broker:RefreshSell()
         f.sellSource:SetText("")
         fill(f.sellListLines, {})
         fill(f.sellListPcts, {})
-        fill(f.sellPriceLines, {})
+        self:FillPricing(nil)
         fill(f.sellResultLines, {})
         fill(f.sellRecentLines, {})
         return
@@ -458,10 +580,36 @@ function Broker:RefreshSell()
         end
         f.sellListPcts[i]:SetText(pct)
     end
-    fill(f.sellPriceLines, self:SellPriceLines(itemID))
+    self:FillPricing(itemID)
     local summary, recent = self:SellResultLines(itemID)
     fill(f.sellResultLines, summary)
     fill(f.sellRecentLines, recent)
+end
+
+-- Fills the pricing rows and breakdown (cleared for nil).
+function Broker:FillPricing(itemID)
+    local f = self.frame
+    local pricing = itemID and self:SellPricing(itemID) or { rows = {}, stackSize = 1, breakdown = {} }
+    f.sellHeadStack:SetText(pricing.stackSize > 1 and ("per " .. pricing.stackSize) or "")
+    f.sellHeadEach:SetText(itemID and "per unit" or "")
+    for i, row in ipairs(f.sellMethodRows) do
+        local r = pricing.rows[i]
+        row.method = r and r.key
+        if r then
+            local label = r.active and (GOLD .. "> " .. r.label .. "|r") or r.label
+            row.label:SetText(label)
+            row.each:SetText(r.each and Util.FormatMoney(r.each) or (GREY .. "-|r"))
+            row.stack:SetText(r.stack and Util.FormatMoney(r.stack) or "")
+        else
+            row.label:SetText(i == 1 and pricing.off or "")
+            row.each:SetText("")
+            row.stack:SetText("")
+        end
+    end
+    local lines = {}
+    for _, line in ipairs(pricing.breakdown) do lines[#lines + 1] = line end
+    if pricing.read then lines[#lines + 1] = GREY .. pricing.read .. "|r" end
+    fill(f.sellBreakdown, lines)
 end
 
 -- Events -----------------------------------------------------------------------
