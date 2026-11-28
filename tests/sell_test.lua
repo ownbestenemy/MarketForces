@@ -122,6 +122,23 @@ check(sell.QuantityInput.quantity == 7, "declined pick doesn't change the item i
 check(H.plain(razzle.speech.text):find("didn't take Copper Ore just now"), "Razzle says it didn't take")
 H.setPostItemDeclines = false
 
+-- The client's own duration names (WoW: Forever's dropdown: 2, 8, 24 hours).
+AUCTION_DURATION_ONE, AUCTION_DURATION_TWO, AUCTION_DURATION_THREE = "2 Hours", "8 Hours", "24 Hours"
+H.slash("duration 24")
+check(MF.Post.db.global.duration == 3 and H.chatHas("Razzle will list for 24 hours"),
+    "/mf duration uses the client's hours")
+H.slash("duration 12")
+check(MF.Post.db.global.duration == 3 and H.chatHas("Use /mf duration 2, 8 or 24"), "unknown hours explained")
+H.slash("duration 8")
+HandleModifiedItemClick(linen, ItemLocation:CreateFromBagAndSlot(0, 2))
+check(H.plain(razzle.speech.text):find("for 8 hours.", 1, true), "Razzle names the dropdown's duration")
+-- The dropdown lands on another duration than Razzle's: Razzle says what it shows.
+sell.Duration.GetDuration = function() return 1 end
+HandleModifiedItemClick(linen, ItemLocation:CreateFromBagAndSlot(0, 2))
+H.runTimers()
+check(H.plain(razzle.speech.text):find("for 2 hours.", 1, true), "Razzle reads the duration actually selected")
+sell.Duration.GetDuration = nil
+
 -- Away from the AH: nothing.
 H.closeAuctionHouse()
 H.postItemSet = nil

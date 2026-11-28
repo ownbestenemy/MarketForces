@@ -31,7 +31,8 @@ local Post = MF:NewModule("Post", {
     global = {
         fillPrice = true, -- put the suggestion into the price box
         shiftSell = true, -- shift-click a bag item at the AH to put it up for sale
-        duration = 2,     -- 1 = 12 hours, 2 = 24 hours, 3 = 48 hours
+        duration = 2,     -- Blizzard's duration choice 1, 2 or 3 (the middle one by default);
+                          -- what each means comes from the client (see Post.DurationName)
         method = "market", -- pricing method, see the header
         undercutFloor = 0.8, -- undercut never goes below this share of market value
     },
@@ -212,7 +213,32 @@ function Post.SuggestQuantity(owned, listed, stackSize)
     return owned, false
 end
 
-local DURATION_NAMES = { "12 hours", "24 hours", "48 hours" }
+-- The client's own names for its three durations ("12 Hours" on retail;
+-- WoW: Forever's dropdown shows "8 Hours" for the middle one), so Razzle
+-- says what Blizzard's dropdown says.
+local DURATION_KEYS = { "AUCTION_DURATION_ONE", "AUCTION_DURATION_TWO", "AUCTION_DURATION_THREE" }
+local DURATION_FALLBACK = { "12 hours", "24 hours", "48 hours" }
+
+function Post.DurationName(index)
+    local text = DURATION_KEYS[index] and _G[DURATION_KEYS[index]]
+    if type(text) == "string" and text ~= "" then
+        return (text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")):lower()
+    end
+    return DURATION_FALLBACK[index] or DURATION_FALLBACK[2]
+end
+
+-- Which duration choice lasts this many hours, or nil.
+function Post.DurationIndex(hours)
+    for i = 1, #DURATION_KEYS do
+        if tonumber(Post.DurationName(i):match("(%d+)")) == hours then return i end
+    end
+end
+
+local function durationHours()
+    local list = {}
+    for i = 1, #DURATION_KEYS do list[i] = Post.DurationName(i):match("(%d+)") or "?" end
+    return table.concat(list, ", ", 1, #list - 1) .. " or " .. list[#list]
+end
 
 -- Unbound copies of an item in your bags, and the first one's location.
 local function findInBags(itemID)
@@ -296,25 +322,36 @@ function Post:SellFromBags(link, location)
     if not target then
         return "The auction house didn't take " .. name .. " just now. Give it a moment and try again, boss."
     end
-    -- After Blizzard (and OnItemSet's price) settle, on the next frame.
+    local suggestion = self:Suggest(itemID)
+    local function lineFor(chosen)
+        local line = string.format("Putting up %d %s", quantity, name)
+        if suggestion and self.db.global.fillPrice then
+            line = line .. " at " .. MF.Util.FormatMoney(suggestion) .. " each"
+        end
+        line = line .. " for " .. Post.DurationName(chosen) .. "."
+        if capped then
+            line = line .. string.format(" You've got %d, but the market only holds about %d right now.",
+                owned, quantity)
+        end
+        return line .. " Check it and click Post when you're happy."
+    end
+    -- After Blizzard (and OnItemSet's price) settle, on the next frame. If
+    -- the dropdown ends up on another duration than ours, Razzle says the
+    -- one it actually shows.
     C_Timer.After(0, function()
         if not (target and Post:IsEnabled() and pending[target] == token and target:IsShown()) then return end
         local qty = target.QuantityInput
         if qty and qty.SetQuantity then pcall(qty.SetQuantity, qty, quantity) end
         local drop = target.Duration or target.DurationDropdown
         if drop and drop.SetDuration then pcall(drop.SetDuration, drop, duration) end
+        if drop and drop.GetDuration then
+            local ok, actual = pcall(drop.GetDuration, drop)
+            if ok and DURATION_KEYS[actual] and actual ~= duration then
+                Post:SendMessage("MF_POST_SAYS", lineFor(actual))
+            end
+        end
     end)
-    local suggestion = self:Suggest(itemID)
-    local line = string.format("Putting up %d %s", quantity, name)
-    if suggestion and self.db.global.fillPrice then
-        line = line .. " at " .. MF.Util.FormatMoney(suggestion) .. " each"
-    end
-    line = line .. " for " .. (DURATION_NAMES[duration] or "24 hours") .. "."
-    if capped then
-        line = line .. string.format(" You've got %d, but the market only holds about %d right now.",
-            owned, quantity)
-    end
-    return line .. " Check it and click Post when you're happy."
+    return lineFor(duration)
 end
 
 -- Shift-click on a bag item. Blizzard passes the item's location on modern
@@ -349,15 +386,14 @@ function Post:OnInitialize()
         Post.db.global.method = key
         MF:Print("Razzle will price sales by", METHOD_LABEL[key])
     end)
-    MF:RegisterSlashCommand("duration", "Sell duration: /mf duration 12, 24 or 48", function(args)
-        local hours = tonumber(args)
-        local value = hours == 12 and 1 or hours == 24 and 2 or hours == 48 and 3
+    MF:RegisterSlashCommand("duration", "Sell duration in hours, as Blizzard's dropdown offers them", function(args)
+        local value = Post.DurationIndex(tonumber(args))
         if not value then
-            MF:Print("Use /mf duration 12, 24 or 48. Now:", DURATION_NAMES[Post.db.global.duration])
+            MF:Print("Use /mf duration " .. durationHours() .. ". Now:", Post.DurationName(Post.db.global.duration))
             return
         end
         Post.db.global.duration = value
-        MF:Print("Razzle will list for", DURATION_NAMES[value])
+        MF:Print("Razzle will list for", Post.DurationName(value))
     end)
     -- Hooked once; OnModifiedClick checks IsEnabled() itself.
     if hooksecurefunc and HandleModifiedItemClick then
