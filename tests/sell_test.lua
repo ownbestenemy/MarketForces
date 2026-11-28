@@ -133,11 +133,31 @@ H.slash("duration 8")
 HandleModifiedItemClick(linen, ItemLocation:CreateFromBagAndSlot(0, 2))
 check(H.plain(razzle.speech.text):find("for 8 hours.", 1, true), "Razzle names the dropdown's duration")
 -- The dropdown lands on another duration than Razzle's: Razzle says what it shows.
+local realGet = sell.Duration.GetDuration
 sell.Duration.GetDuration = function() return 1 end
 HandleModifiedItemClick(linen, ItemLocation:CreateFromBagAndSlot(0, 2))
 H.runTimers()
 check(H.plain(razzle.speech.text):find("for 2 hours.", 1, true), "Razzle reads the duration actually selected")
-sell.Duration.GetDuration = nil
+sell.Duration.GetDuration = realGet
+
+-- You pick another duration in Blizzard's dropdown afterwards: Razzle keeps up.
+HandleModifiedItemClick(linen, ItemLocation:CreateFromBagAndSlot(0, 2))
+H.runTimers()
+check(H.plain(razzle.speech.text):find("for 8 hours.", 1, true), "starts at 8 hours")
+sell.Duration.duration = 3 -- the player's choice in the dropdown
+sell:OnDurationUpdated()
+check(H.plain(razzle.speech.text):find("Putting up 24 Linen Cloth at 1s 58c each for 24 hours.", 1, true),
+    "Razzle follows the dropdown live")
+H.chat = {}
+local before = razzle.speech.text
+sell:OnDurationUpdated()
+check(razzle.speech.text == before, "no change, nothing said again")
+-- Another item in the slot since: the old line isn't brought back.
+sell:SetItem({ itemID = 2770 })
+razzle.speech:SetText("something else")
+sell.Duration.duration = 1
+sell:OnDurationUpdated()
+check(razzle.speech.text == "something else", "a newer item's slot isn't talked over")
 
 -- Away from the AH: nothing.
 H.closeAuctionHouse()

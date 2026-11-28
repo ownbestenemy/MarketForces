@@ -221,7 +221,12 @@ local function addSellFrames(window)
         local sell = CreateFrame("Frame", nil, window)
         sell.PriceInput = { amount = 0, SetAmount = function(self, v) self.amount = v end }
         sell.QuantityInput = { SetQuantity = function(self, v) self.quantity = v end }
-        sell.Duration = { SetDuration = function(self, v) self.duration = v end }
+        sell.Duration = {
+            SetDuration = function(self, v) self.duration = v end,
+            GetDuration = function(self) return self.duration end,
+        }
+        -- Blizzard calls this when the dropdown's choice changes.
+        function sell.OnDurationUpdated() end
         function sell.SetItem(self, location)
             self.item = location
             self.PriceInput:SetAmount(H.blizzardDefaultPrice or 0)

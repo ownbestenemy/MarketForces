@@ -23,6 +23,7 @@ read_globals = {
     "ItemLocation",
     "MarketForcesRazzleFrame",
     "SetCVar",
+    "GetCVar",
     "C_AddOns",
     "C_AuctionHouse",
     "C_Container",

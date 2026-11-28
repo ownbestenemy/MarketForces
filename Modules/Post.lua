@@ -129,6 +129,7 @@ end
 
 local pending = {}  -- sellFrame -> token of the latest selection
 local selected = {} -- sellFrame -> item ID of the latest selection
+local sayings = {}  -- sellFrame -> what Razzle said about its item (see SellFromBags)
 
 -- Called after Blizzard's sell frame takes an item.
 function Post:OnItemSet(sellFrame, itemLocation)
@@ -184,6 +185,14 @@ function Post:HookSellFrames()
                 Post:OnItemSet(frame, itemLocation)
             end)
             self.hooked[sellFrame] = true
+            -- Duration changes, however they happen: Blizzard's sell frame
+            -- callback, the deposit refresh that follows, or the dropdown.
+            local function changed() Post:OnDurationChanged(sellFrame) end
+            for _, method in ipairs({ "OnDurationUpdated", "UpdateDeposit" }) do
+                if type(sellFrame[method]) == "function" then hooksecurefunc(sellFrame, method, changed) end
+            end
+            local drop = sellFrame.Duration or sellFrame.DurationDropdown
+            if drop and type(drop.SetDuration) == "function" then hooksecurefunc(drop, "SetDuration", changed) end
         end
         any = any or (sellFrame ~= nil and self.hooked[sellFrame] == true)
     end
@@ -338,20 +347,42 @@ function Post:SellFromBags(link, location)
     -- After Blizzard (and OnItemSet's price) settle, on the next frame. If
     -- the dropdown ends up on another duration than ours, Razzle says the
     -- one it actually shows.
+    -- Remembered so Razzle can say it again when the duration changes later.
+    sayings[target] = { token = token, said = duration, lineFor = lineFor }
     C_Timer.After(0, function()
         if not (target and Post:IsEnabled() and pending[target] == token and target:IsShown()) then return end
         local qty = target.QuantityInput
         if qty and qty.SetQuantity then pcall(qty.SetQuantity, qty, quantity) end
         local drop = target.Duration or target.DurationDropdown
         if drop and drop.SetDuration then pcall(drop.SetDuration, drop, duration) end
-        if drop and drop.GetDuration then
-            local ok, actual = pcall(drop.GetDuration, drop)
-            if ok and DURATION_KEYS[actual] and actual ~= duration then
-                Post:SendMessage("MF_POST_SAYS", lineFor(actual))
-            end
-        end
+        Post:OnDurationChanged(target)
     end)
     return lineFor(duration)
+end
+
+-- The duration a sell frame's dropdown shows, or nil.
+local function shownDuration(sellFrame)
+    local drop = sellFrame.Duration or sellFrame.DurationDropdown
+    if drop and drop.GetDuration then
+        local ok, value = pcall(drop.GetDuration, drop)
+        if ok and DURATION_KEYS[value] then return value end
+    end
+    -- Blizzard saves the dropdown's choice here when it changes.
+    local saved = GetCVar and tonumber(GetCVar("auctionHouseDurationDropdown"))
+    if DURATION_KEYS[saved] then return saved end
+end
+
+-- The duration may have changed (Razzle set it, or you picked another in
+-- Blizzard's dropdown): if Razzle's line about the item in this sell frame
+-- names a different one, Razzle says it again with the one shown.
+function Post:OnDurationChanged(sellFrame)
+    local saying = sayings[sellFrame]
+    if not (saying and self:IsEnabled() and pending[sellFrame] == saying.token) then return end
+    local shown = shownDuration(sellFrame)
+    if shown and shown ~= saying.said then
+        saying.said = shown
+        self:SendMessage("MF_POST_SAYS", saying.lineFor(shown))
+    end
 end
 
 -- Shift-click on a bag item. Blizzard passes the item's location on modern
