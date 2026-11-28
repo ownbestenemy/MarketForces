@@ -160,8 +160,8 @@ end
 -- active (the one you chose) } }, stackSize, chosen, method (in use: the
 -- chosen one, or market value while it has no number), price (per unit), breakdown =
 -- lines about your copies, read = Razzle's read of the market, off =
--- message when selling is off }. Prices per unit are whole silver, as the
--- sell frames take them; per stack is that times the stack size.
+-- message when selling is off }. Prices per unit are to the copper;
+-- per stack is that times the stack size.
 function Broker:SellPricing(itemID)
     local post = MF.Post
     if not (post and post:IsEnabled()) then
@@ -326,7 +326,6 @@ function Broker:MatchListing(price)
     local amount = post.RoundPrice(price)
     input:SetAmount(amount)
     local line = "Matched at " .. Util.FormatMoney(amount) .. " each"
-    if amount ~= price then line = line .. " (whole silver)" end
     f.speech:SetText(line .. ". Click Post when you're happy, boss.")
 end
 
@@ -370,12 +369,12 @@ local function column(page, x, width, title)
     return col
 end
 
-local function textLines(col, anchor, count, width, gap)
+local function textLines(col, anchor, count, width, gap, wrap)
     local lines, previous = {}, anchor
     for i = 1, count do
         local line = Broker.NewText(col, "GameFontHighlightSmall", width)
         line:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, -(gap or 3))
-        if line.SetWordWrap then line:SetWordWrap(false) end
+        if line.SetWordWrap then line:SetWordWrap(wrap == true) end
         lines[i], previous = line, line
     end
     return lines
@@ -383,7 +382,7 @@ end
 
 function Broker:BuildSellPage(f, page)
     if not page then return end
-    local W = 188
+    local W, W2 = self.SELL_BAGS_WIDTH, self.SELL_LISTINGS_WIDTH
 
     -- Your bags.
     local bags = column(page, 0, W, "Your bags")
@@ -410,11 +409,11 @@ function Broker:BuildSellPage(f, page)
     f.sellPrev:SetScript("OnClick", function() Broker:TurnSellPage(-1) end)
 
     -- Competing listings.
-    local listings = column(page, W + 12, W, "Competing listings")
-    f.sellItemName = Broker.NewText(listings, "GameFontHighlight", W)
+    local listings = column(page, W + 12, W2, "Competing listings")
+    f.sellItemName = Broker.NewText(listings, "GameFontHighlight", W2)
     f.sellItemName:SetPoint("TOPLEFT", listings.header, "BOTTOMLEFT", 0, -4)
     if f.sellItemName.SetWordWrap then f.sellItemName:SetWordWrap(false) end
-    f.sellSource = Broker.NewText(listings, "GameFontDisableSmall", W)
+    f.sellSource = Broker.NewText(listings, "GameFontDisableSmall", W2)
     f.sellSource:SetPoint("TOPLEFT", f.sellItemName, "BOTTOMLEFT", 0, -2)
     -- The "vs market" column: each listing's distance from market value.
     local vsHeader = Broker.NewText(listings, "GameFontNormalSmall", 60)
@@ -424,7 +423,7 @@ function Broker:BuildSellPage(f, page)
     f.sellListLines, f.sellListRows, f.sellListPcts = {}, {}, {}
     previous = f.sellSource
     for i = 1, self.SELL_LIST_ROWS do
-        local row, line = Broker.NewItemRow(listings, "Click to put this price in the sell slot", W)
+        local row, line = Broker.NewItemRow(listings, "Click to put this price in the sell slot", W2)
         row:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, -3)
         row:SetScript("OnClick", function(button)
             if button.price then Broker:MatchListing(button.price) end
@@ -432,14 +431,14 @@ function Broker:BuildSellPage(f, page)
         local pct = Broker.NewText(row, "GameFontHighlightSmall", 44)
         pct:SetPoint("RIGHT", row, "RIGHT", 0, 0)
         pct:SetJustifyH("RIGHT")
-        line:SetWidth(W - 46)
+        line:SetWidth(W2 - 46)
         f.sellListLines[i], f.sellListRows[i], f.sellListPcts[i] = line, row, pct
         previous = row
     end
 
     -- Pricing & results.
     local W3 = self.SELL_PRICING_WIDTH
-    local results = column(page, 2 * (W + 12), W3, "Pricing")
+    local results = column(page, W + W2 + 24, W3, "Pricing")
     -- Column heads: method, per unit, per stack.
     local function cells(parent)
         local each = Broker.NewText(parent, "GameFontHighlightSmall", 70)
@@ -477,14 +476,14 @@ function Broker:BuildSellPage(f, page)
         f.sellMethodRows[i] = row
         previous = row
     end
-    f.sellBreakdown = textLines(results, previous, 4, W3, 3)
+    f.sellBreakdown = textLines(results, previous, 4, W3, 3, true)
     f.sellBreakdown[1]:ClearAllPoints()
     f.sellBreakdown[1]:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, -6)
 
     local resultsHeader = Broker.NewText(results, "GameFontNormal", W3)
     resultsHeader:SetPoint("TOPLEFT", f.sellBreakdown[4], "BOTTOMLEFT", 0, -8)
     resultsHeader:SetText("Your results")
-    f.sellResultLines = textLines(results, resultsHeader, 5, W3, 3)
+    f.sellResultLines = textLines(results, resultsHeader, 5, W3, 3, true)
     local recentHeader = Broker.NewText(results, "GameFontNormalSmall", W3)
     recentHeader:SetPoint("TOPLEFT", f.sellResultLines[5], "BOTTOMLEFT", 0, -6)
     recentHeader:SetText("Latest")

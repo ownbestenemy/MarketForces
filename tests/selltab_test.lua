@@ -22,7 +22,9 @@ check(Broker.StackSplit(24, 20) == "24 = 1 stack of 20 + 4" and Broker.StackSpli
     "stack split")
 check(Broker.StackSplit(4, 20) == nil and Broker.StackSplit(3, 1) == nil, "no split under a stack or for one-offs")
 local opts = MF.Post:PriceOptions(nil, { { 1050, 5 }, { 1200, 5 }, { 900, 2, true } })
-check(opts.match == 1000 and opts.undercut == 1000 and opts.median == 1050, "options from listings, yours skipped")
+check(opts.match == 1050 and opts.undercut == 1049 and opts.median == 1050, "options from listings, yours skipped")
+opts = MF.Post:PriceOptions(nil, { { 495, 3 } })
+check(opts.match == 495 and opts.undercut == 494, "a 4s 95c listing is matched at 4s 95c, not 5s")
 opts = MF.Post:PriceOptions(nil, Broker.MergeListings({ { 1000, 1, true }, { 1000, 10, false }, { 2000, 1, false } }))
 check(opts.match == 1000, "a price you share with others still counts theirs")
 opts = MF.Post:PriceOptions(nil, Broker.MergeListings({ { 1000, 3, true, 3 }, { 2000, 1 } }))
@@ -98,13 +100,14 @@ local function rowIs(i, label, each, stack, what)
     check(l == label and e == each and st == stack, what .. " (got " .. l .. " | " .. e .. " | " .. st .. ")")
 end
 check(frame.sellHeadEach.text == "per unit" and frame.sellHeadStack.text == "per 20", "column heads")
-rowIs(1, "> Market value", "2s", "40s", "market value in use, rounded to silver")
+rowIs(1, "> Market value", "1s 77c", "35s 40c", "market value in use, copper kept")
 rowIs(2, "Median", "3s", "60s", "median of the scan")
-rowIs(3, "Trimmed mean", "3s", "60s", "trimmed mean of the scan")
-rowIs(4, "Undercut (floor)", "2s", "40s", "undercut held at 80% of market")
-rowIs(5, "Match cheapest", "1s", "20s", "match rounds the cheapest down")
+rowIs(3, "Trimmed mean", "2s 55c", "51s", "trimmed mean of the scan")
+rowIs(4, "Undercut", "1s 49c", "29s 80c", "undercut 1c under the cheapest")
+rowIs(5, "Match cheapest", "1s 50c", "30s", "match to the copper")
 rowIs(6, "Your sales", "2s", "40s", "your sales' average")
-check(H.plain(frame.sellBreakdown[1].text) == "Your 20 at 2s: 40s, 38s after the cut", "what your copies bring")
+check(H.plain(frame.sellBreakdown[1].text) == "Your 20 at 1s 77c: 35s 40c, 33s 63c after the cut",
+    "what your copies bring")
 check(H.plain(frame.sellBreakdown[2].text) == "20 = 1 stack of 20", "stacks")
 check(H.plain(frame.sellResultLines[1].text) == "Sold 15 in 2 listings, ~2s each", "sales summed for this market only")
 check(H.plain(frame.sellResultLines[2].text) == "Sell-through: 2 of 3 (67%)", "sell-through")
@@ -131,8 +134,9 @@ check(H.plain(frame.sellListLines[1].text) == "15 at 1s 40c", "live listings mer
 check(H.plain(frame.sellListLines[2].text) == "4 at 1s 80c (yours)", "your live listing marked")
 check(frame.sellListPcts[2].text == Broker.VsMarket(180, linenMarket), "vs market for live listings")
 check(frame.sellListPcts[3].text == "", "empty rows have no percent")
-rowIs(2, "Median", "1s", "20s", "median of the live listings")
-rowIs(5, "Match cheapest", "1s", "20s", "match ignores your own listing")
+rowIs(2, "Median", "1s 40c", "28s", "median of the live listings")
+rowIs(5, "Match cheapest", "1s 40c", "28s", "match ignores your own listing")
+rowIs(4, "Undercut (floor)", "1s 42c", "28s 40c", "undercut held at 80% of market")
 
 -- Live results are authoritative even when empty: no competitors, no match.
 local empty = MF.Post:PriceOptions(2589, {})
@@ -143,19 +147,21 @@ check(empty.match == nil and empty.undercut == nil and empty.median == nil and e
 sell.PriceInput.amount = 0
 frame.sellMethodRows[2]:Click()
 check(MF.Post.db.global.method == "median", "median chosen")
-check(sell.PriceInput.amount == 100, "median price put in the sell slot")
-check(H.plain(frame.speech.text) == "Pricing by median from now on. Set 1s each. Click Post when you're happy, boss.",
+check(sell.PriceInput.amount == 140, "median price put in the sell slot")
+check(H.plain(frame.speech.text)
+    == "Pricing by median from now on. Set 1s 40c each. Click Post when you're happy, boss.",
     "Razzle says so")
-rowIs(1, "Market value", "2s", "40s", "market no longer marked")
-rowIs(2, "> Median", "1s", "20s", "median marked")
-check(H.plain(frame.sellBreakdown[1].text) == "Your 20 at 1s: 20s, 19s after the cut", "breakdown follows the method")
+rowIs(1, "Market value", "1s 77c", "35s 40c", "market no longer marked")
+rowIs(2, "> Median", "1s 40c", "28s", "median marked")
+check(H.plain(frame.sellBreakdown[1].text) == "Your 20 at 1s 40c: 28s, 26s 60c after the cut",
+    "breakdown follows the method")
 -- Razzle's own fill-in (the item put in the slot again) uses the live median too.
 sell.PriceInput.amount = 0
 sell:SetItem({ itemID = 2589, bag = 0, slot = 1 })
 H.runTimers()
-check(sell.PriceInput.amount == 100, "automatic fill agrees with the live price shown")
+check(sell.PriceInput.amount == 140, "automatic fill agrees with the live price shown")
 frame.sellMethodRows[1]:Click()
-check(MF.Post.db.global.method == "market" and sell.PriceInput.amount == 200, "back to market value")
+check(MF.Post.db.global.method == "market" and sell.PriceInput.amount == 177, "back to market value")
 H.slash("pricing trimmed")
 check(MF.Post.db.global.method == "trimmed", "/mf pricing sets the method")
 H.slash("pricing nonsense")
@@ -165,8 +171,8 @@ H.slash("pricing market")
 -- Click a listing: its price goes in Blizzard's price box (whole silver).
 sell.PriceInput.amount = 0
 frame.sellListRows[1]:Click()
-check(sell.PriceInput.amount == 100, "1s 40c rounds to 1s")
-check(H.plain(frame.speech.text):find("Matched at 1s each (whole silver)", 1, true), "Razzle says it matched")
+check(sell.PriceInput.amount == 140, "the listing's exact price, copper and all")
+check(H.plain(frame.speech.text):find("Matched at 1s 40c each. Click Post", 1, true), "Razzle says it matched")
 
 -- The sell slot now holds ore (put there by hand): the tab follows it, and a
 -- listing click can't touch ore's price with linen's numbers.

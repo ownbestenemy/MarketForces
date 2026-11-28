@@ -42,8 +42,8 @@ shift-clicked into its box. Razzle never buys, posts or cancels anything.
 Flip reads the cheapest listings Prices keeps from the latest scan (a
 "ladder" of price steps, up to the first one at or above market value) and
 finds the most profitable flip: buy every step up to some price, relist the
-lot one silver under whatever listing would be left cheapest (never above
-market value, whole silver since the sell frames take no copper), and keep
+lot one copper under whatever listing would be left cheapest (never above
+market value), and keep
 the profit after the 5% cut. Each step bought must earn at least 10c a unit
 and 15% on its cost. Razzle's window has a **Flips** tab: type a name (or
 shift-click an item) for the plan, with the deposit (Blizzard's own figure
@@ -70,7 +70,7 @@ Blizzard's own sell frame searches for its listings; the tab reads those
 results (`COMMODITY_SEARCH_RESULTS_UPDATED`, `ITEM_SEARCH_RESULTS_UPDATED`)
 and shows them live, your own marked, and until then shows the latest
 scan's cheapest listings. A **vs market** column gives each listing's
-distance from market value (-12% in green, +8% in orange). Clicking a listing puts its price (whole silver)
+distance from market value (-12% in green, +8% in orange). Clicking a listing puts its exact price
 in Blizzard's price box, only when the sell slot holds that item. Whatever
 goes in the sell slot by hand is followed too. The tab never sends a
 search, never posts: the Post click is the player's.
@@ -78,9 +78,8 @@ search, never posts: the Post click is the player's.
 The Sell tab's third column, **Pricing**, lists every pricing method's price
 per unit and per stack (the item's stack size), with the one in use marked:
 market value, median, trimmed mean (cheapest and dearest 10% of units left
-out), undercut (the highest whole silver below the cheapest other listing,
-never under 80% of market value), match cheapest (rounded down to whole
-silver) and your sales (your average sale price from History). Median,
+out), undercut (1 copper below the cheapest other listing,
+never under 80% of market value), match cheapest (to the copper) and your sales (your average sale price from History). Median,
 trimmed mean, undercut and match use the live listings when the tab has
 them, otherwise the latest scan's (Prices keeps each scan's median and
 trimmed mean). Click a method to price by it from now on (also
@@ -92,7 +91,7 @@ cut. Then your results from History.
 
 Post hooks Blizzard's sell frames (`ItemSellFrame`, `CommoditiesSellFrame`).
 When an item goes in, it sets the price box to the chosen pricing method's
-price (market value by default), rounded to the nearest silver, one frame after Blizzard sets its default. It never calls
+price (market value by default), to the copper, one frame after Blizzard sets its default. It never calls
 a posting function: the Post click is always the player's. `/mf autofill`
 turns the fill-in off and leaves Razzle's advice.
 

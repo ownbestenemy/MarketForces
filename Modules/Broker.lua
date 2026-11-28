@@ -249,9 +249,12 @@ local function newItemBox(parent, name, onEnter)
 end
 
 Broker.TABS = { "Bargains", "Flips", "Sell" }
-Broker.WIDTH, Broker.WIDE = 320, 680 -- the Sell tab's three columns need the wide window
-Broker.HEIGHT, Broker.TALL = 480, 580
-Broker.SELL_PRICING_WIDTH = 256
+-- The Sell tab's three columns need a wide, tall window:
+-- 12 + bags + 12 + listings + 12 + pricing + 12.
+Broker.SELL_BAGS_WIDTH, Broker.SELL_LISTINGS_WIDTH, Broker.SELL_PRICING_WIDTH = 236, 216, 300
+Broker.WIDTH = 320
+Broker.WIDE = 12 + Broker.SELL_BAGS_WIDTH + 12 + Broker.SELL_LISTINGS_WIDTH + 12 + Broker.SELL_PRICING_WIDTH + 12
+Broker.HEIGHT, Broker.TALL = 480, 620
 Broker.FLIP_ROWS = 6
 
 function Broker:CreateWindow()
@@ -415,6 +418,7 @@ function Broker:ShowTab(title)
     end
     f:SetWidth(title == "Sell" and self.WIDE or self.WIDTH)
     f:SetHeight(title == "Sell" and self.TALL or self.HEIGHT)
+    f.speech:SetWidth((title == "Sell" and self.WIDE or self.WIDTH) - 84) -- beside the portrait
     if title == "Flips" then self:RefreshFlips() end
     if title == "Sell" and self.RefreshSell then self:RefreshSell() end
 end

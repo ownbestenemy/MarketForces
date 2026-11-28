@@ -48,10 +48,10 @@ HandleModifiedItemClick(linen, ItemLocation:CreateFromBagAndSlot(0, 2))
 check(H.postItemSet and H.postItemSet.bag == 0 and H.postItemSet.slot == 2, "item goes in the sell slot")
 check(H.cvars.auctionHouseDurationDropdown == 2, "24 hours set as Blizzard's default")
 H.runTimers()
-check(sell.PriceInput.amount == 200, "price filled with market value (rounded to silver)")
+check(sell.PriceInput.amount == 158, "price filled with market value, copper kept")
 check(sell.QuantityInput.quantity == 24, "quantity: all 24 in your bags")
 check(sell.Duration.duration == 2, "duration dropdown set to 24 hours")
-check(H.plain(razzle.speech.text) == "Putting up 24 Linen Cloth at 2s each for 24 hours. "
+check(H.plain(razzle.speech.text) == "Putting up 24 Linen Cloth at 1s 58c each for 24 hours. "
     .. "Check it and click Post when you're happy.", "Razzle says what's set up")
 
 -- No location from Blizzard: found by item ID. More than the market holds: capped.

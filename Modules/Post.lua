@@ -8,9 +8,9 @@
 --   median    the median unit price of the listings
 --   trimmed   the average unit price with the cheapest and dearest 10% of
 --             units left out
---   undercut  the highest whole silver below the cheapest other listing,
+--   undercut  1 copper below the cheapest other listing,
 --             but never under 80% of market value (undercutFloor)
---   match     the cheapest other listing (rounded down to whole silver)
+--   match     the cheapest other listing, to the copper
 --   history   what your own sales averaged (from your auction mail)
 -- Listings are live from the auction house when Razzle's Sell tab has them
 -- (also when Razzle fills in a price by itself),
@@ -38,13 +38,11 @@ local Post = MF:NewModule("Post", {
 })
 MF.Post = Post
 
-local SILVER = 100
-
--- A price per unit rounded to the nearest silver (at least 1s), since the
--- sell frames don't take copper.
+-- A price per unit in whole copper (at least 1c). Prices keep their copper:
+-- the sell frames take gold, silver and copper.
 function Post.RoundPrice(copper)
-    local rounded = math.floor((tonumber(copper) or 0) / SILVER + 0.5) * SILVER
-    if rounded < SILVER then rounded = SILVER end
+    local rounded = math.floor((tonumber(copper) or 0) + 0.5)
+    if rounded < 1 then rounded = 1 end
     return rounded
 end
 
@@ -85,14 +83,12 @@ function Post:PriceOptions(itemID, listings)
         out.median, out.trimmed, cheapest = p.median, p.trimmed, p.minBuyout
     end
     if cheapest then
-        -- Whole silver, since the sell frames take no copper: match is the
-        -- cheapest rounded down, undercut the highest whole silver below
-        -- it, floored (rounded up to whole silver) so a price war can't
-        -- drag us under a share of market value.
-        out.match = math.max(math.floor(cheapest / SILVER) * SILVER, SILVER)
-        local under = math.ceil(cheapest / SILVER) * SILVER - SILVER
-        local minimum = market and math.ceil(market * (self.db.global.undercutFloor or 0) / SILVER) * SILVER or 0
-        out.undercut = math.max(under, minimum, SILVER)
+        -- Match is the cheapest to the copper; undercut is 1c under it,
+        -- floored so a price war can't drag us under a share of market value.
+        out.match = cheapest
+        local under = cheapest - 1
+        local minimum = market and math.ceil(market * (self.db.global.undercutFloor or 0)) or 0
+        out.undercut = math.max(under, minimum, 1)
         out.undercutFloored = under < minimum
     end
     local history = MF.History
@@ -103,7 +99,7 @@ end
 
 -- The suggested buyout per unit for an item at the current auction house,
 -- by the chosen pricing method (falling back to market value), rounded to
--- the nearest silver (at least 1s) since the sell frames don't take copper.
+-- whole copper (at least 1c).
 -- Returns the price (nil when there's nothing to go on), Prices' entry, and
 -- the method used.
 function Post:Suggest(itemID, listings)

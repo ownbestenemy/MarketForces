@@ -4,8 +4,8 @@
 -- Prices) and works out the best flip: how many units to buy and up to what
 -- price, what to relist them at, and the profit after the auction house's
 -- 5% cut. The relist price undercuts whatever listing would be left
--- cheapest after you buy, but never goes above market value, and is whole
--- silver since the sell frames don't take copper. A step is only worth
+-- cheapest after you buy (by 1 copper), but never goes above market value.
+-- A step is only worth
 -- buying when it clears a minimum profit per unit and a minimum margin.
 --
 -- Razzle's window shows this on its Flips tab, along with the best flips on
@@ -28,7 +28,6 @@ local Flip = MF:NewModule("Flip", {
 MF.Flip = Flip
 
 local floor = math.floor
-local SILVER = 100
 local HOUR = 60 * 60
 
 local function getItemInfo(item)
@@ -61,8 +60,8 @@ function Flip.Analyze(p, opts)
         local wall = nextStep and nextStep[1]
         local target = market
         if wall and wall - 1 < target then target = wall - 1 end
-        local resale = floor(target / SILVER) * SILVER
-        if resale >= SILVER then
+        local resale = floor(target)
+        if resale >= 1 then
             local net = floor(resale * (1 - cut))
             local unitProfit = net - step[1] -- the dearest unit bought so far
             local needed = math.max(opts.minUnitProfit or 0, step[1] * (opts.minMargin or 0))
@@ -236,7 +235,7 @@ function Flip:Advise(text)
     local owned = Flip.CountInBags(itemID)
     if owned > 0 and p.market then
         local ask = plan and plan.resale or (MF.Post and MF.Post:Suggest(itemID))
-            or math.max(SILVER, floor(p.market / SILVER + 0.5) * SILVER)
+            or math.max(1, floor(p.market + 0.5))
         lines[#lines + 1] = string.format("You've got %d in your bags: list them at %s each.", owned, money(ask))
     end
     if p.market and p.days < 3 then

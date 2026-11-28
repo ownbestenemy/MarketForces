@@ -18,7 +18,8 @@ H.fire("REPLICATE_ITEM_LIST_UPDATE")
 H.runTimers()
 
 check(Post:Suggest(2770) == 12500, "suggestion is market value")
-check(Post:Suggest(2589) == 100, "tiny prices round up to 1 silver")
+check(Post:Suggest(2589) == 80, "prices keep their copper")
+check(Post.RoundPrice(0.2) == 1 and Post.RoundPrice(495) == 495, "at least 1c; copper kept")
 check(Post:Suggest(424242) == nil, "no suggestion without history")
 
 -- Putting an item in the sell slot fills in the price on the next frame.
