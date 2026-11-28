@@ -14,6 +14,7 @@ local tests = {
     "tests/history_test.lua",
     "tests/outside_test.lua",
     "tests/selltab_test.lua",
+    "tests/pick_test.lua",
 }
 local lua = arg and arg[-1] or "lua5.1"
 local failed = 0

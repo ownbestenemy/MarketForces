@@ -42,8 +42,8 @@ shift-clicked into its box. Razzle never buys, posts or cancels anything.
 Flip reads the cheapest listings Prices keeps from the latest scan (a
 "ladder" of price steps, up to the first one at or above market value) and
 finds the most profitable flip: buy every step up to some price, relist the
-lot one silver under whatever listing would be left cheapest (never above
-market value, whole silver since the sell frames take no copper), and keep
+lot one copper under whatever listing would be left cheapest (never above
+market value), and keep
 the profit after the 5% cut. Each step bought must earn at least 10c a unit
 and 15% on its cost. Razzle's window has a **Flips** tab: type a name (or
 shift-click an item) for the plan, with the deposit (Blizzard's own figure
@@ -70,14 +70,45 @@ Blizzard's own sell frame searches for its listings; the tab reads those
 results (`COMMODITY_SEARCH_RESULTS_UPDATED`, `ITEM_SEARCH_RESULTS_UPDATED`)
 and shows them live, your own marked, and until then shows the latest
 scan's cheapest listings. A **vs market** column gives each listing's
-distance from market value (-12% in green, +8% in orange). Clicking a listing puts its price (whole silver)
+distance from market value (-12% in green, +8% in orange). Clicking a listing puts its exact price
 in Blizzard's price box, only when the sell slot holds that item. Whatever
 goes in the sell slot by hand is followed too. The tab never sends a
 search, never posts: the Post click is the player's.
 
+The Sell tab's third column, **Pricing**, lists every pricing method's price
+per unit and for all your copies, with the one in use marked:
+**Razzle's pick** (the default, below), market value, median, trimmed mean (cheapest and dearest 10% of units left
+out), undercut (1 copper below the cheapest other listing,
+never under 80% of market value), match cheapest (to the copper) and your sales (your average sale price from History). Median,
+trimmed mean, undercut and match use the live listings when the tab has
+them, otherwise the latest scan's (Prices keeps each scan's median and
+trimmed mean, and the cheapest listing from other sellers: Scan knows your
+own auctions by seller name, so you never undercut yourself). Click a method to price by it from now on (also
+`/mf pricing <method>`); if the sell slot holds the item, its price box
+gets the new price. A method with no number yet falls back to market
+value, and the tab says so. Below the methods: what your copies would
+bring before and after the 5% cut, and how many Razzle would put up at a
+time when that's fewer than you hold. WoW: Forever has the retail-style
+auction house, so there are no stacks: a commodity (cloth, ore, potions) is
+posted as one quantity at one price per unit, and buyers take the cheapest
+units first. Then your results from History.
+
+**Razzle's pick** prices to sell. Commodities pool by price, the cheapest
+units sell first and, at one price, the newest listing sells first, so
+Razzle matches the cheapest other seller; gear is listed one by one, so it
+goes 1 copper under. A thin layer of lowball listings at the bottom isn't
+chased (`Prices.CheapestThatCounts`): listings that together make up at
+most 10% of other sellers' units and sit more than 10% under the price
+where the rest of the supply starts are skipped, so 5 units out of 100 at
+half price don't drag your price down. It never goes under 80% of market
+value, and with nobody else selling it's market value. Razzle says which
+of these it did, in the sell slot's speech and under the methods. Scan data
+keeps the cheapest that counts per item too (`entry.oc`, skipped units in
+`entry.ol`).
+
 Post hooks Blizzard's sell frames (`ItemSellFrame`, `CommoditiesSellFrame`).
-When an item goes in, it sets the price box to the market value, rounded to
-the nearest silver, one frame after Blizzard sets its default. It never calls
+When an item goes in, it sets the price box to the chosen pricing method's
+price (Razzle's pick by default), to the copper, one frame after Blizzard sets its default. It never calls
 a posting function: the Post click is always the player's. `/mf autofill`
 turns the fill-in off and leaves Razzle's advice.
 
@@ -85,9 +116,13 @@ Shift-clicking a bag item while the auction house is open puts it up for
 sale: Post finds it in the bags, calls Blizzard's `AuctionHouseFrame:SetPostItem`
 (the same as right-clicking it on the Sell tab), and on the next frame sets
 the quantity and duration. The quantity is everything you hold, capped at
-what other sellers list right now (at least one stack); the duration is 24
-hours unless changed with `/mf duration`, also saved to Blizzard's
-`auctionHouseDurationDropdown` default. It's skipped while a chat box, the
+what other sellers list right now (but never fewer than one bag slot
+holds, e.g. 20 cloth); the duration is
+Blizzard's middle choice unless changed with `/mf duration <hours>`, also
+saved to Blizzard's `auctionHouseDurationDropdown` default. Durations are
+named from the client's own strings (`AUCTION_DURATION_ONE` etc.; Forever's
+dropdown shows 8 hours where retail shows 24), and if the dropdown ends up
+on another duration, Razzle says the one it shows. It's skipped while a chat box, the
 AH search box or one of Razzle's boxes has focus, so shift-click still
 links items there. Razzle says what it set up; the player clicks Post.
 `/mf shiftsell` turns it off.

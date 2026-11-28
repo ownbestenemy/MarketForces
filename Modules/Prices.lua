@@ -28,6 +28,9 @@
 --       every price below market value (up to ladderSteps of them) plus the
 --       first one at or above it. bm = true when cheaper-than-market
 --       listings were left off the end. Flip advice reads these.
+--   md = the latest scan's median unit price, tm = its trimmed mean (the
+--       cheapest and dearest 10% of units dropped), both counted per unit.
+--       Post offers these as pricing methods for sellers.
 local _, MF = ...
 
 local Util = MF.Util
@@ -73,6 +76,53 @@ function Prices.ScanValue(listings, share)
         sum = sum + listing[1] * take
         units = units + take
         if units >= wanted then break end
+    end
+    return floor(sum / units + 0.5)
+end
+
+-- Listings { unitPrice, units } sorted cheapest first, and their units.
+local function sortedUnits(listings)
+    local sorted, total = {}, 0
+    for _, listing in ipairs(listings or {}) do
+        if listing[1] and (listing[2] or 0) > 0 then
+            sorted[#sorted + 1] = listing
+            total = total + listing[2]
+        end
+    end
+    table.sort(sorted, function(a, b) return a[1] < b[1] end)
+    return sorted, total
+end
+
+-- The median unit price, counting every unit listed, or nil.
+function Prices.Median(listings)
+    local sorted, total = sortedUnits(listings)
+    if total == 0 then return nil end
+    local middle, seen = math.ceil(total / 2), 0
+    for _, listing in ipairs(sorted) do
+        seen = seen + listing[2]
+        if seen >= middle then return listing[1] end
+    end
+end
+
+-- The average unit price with the cheapest and dearest `trim` share of
+-- units (default 10% each) left out, so a few silly listings either way
+-- don't move it. nil for no listings.
+function Prices.TrimmedMean(listings, trim)
+    local sorted, total = sortedUnits(listings)
+    if total == 0 then return nil end
+    trim = trim or 0.1
+    local skip = math.floor(total * trim)
+    local first, last = skip, total - skip -- keep units first+1 .. last
+    if last <= first then first, last = 0, total end
+    local seen, sum, units = 0, 0, 0
+    for _, listing in ipairs(sorted) do
+        local from, to = seen + 1, seen + listing[2]
+        local take = math.min(to, last) - math.max(from, first + 1) + 1
+        if take > 0 then
+            sum = sum + listing[1] * take
+            units = units + take
+        end
+        seen = to
     end
     return floor(sum / units + 0.5)
 end
@@ -168,6 +218,46 @@ function Prices.ConfidenceLabel(score)
 end
 
 -- The cheapest listings as a flat ladder (see the header), or nil, more.
+-- Lowball listings Razzle's pick doesn't chase: the cheapest listings, if
+-- together they're at most this share of other sellers' units and sit more
+-- than LOWBALL_GAP under the price where the real supply starts.
+Prices.LOWBALL_SHARE, Prices.LOWBALL_GAP = 0.1, 0.1
+
+-- Other sellers' cheapest price that counts, from { unitPrice, units,
+-- yours, yourUnits } listings (yours = all of it is yours unless yourUnits
+-- says how many): a thin layer of lowball listings at the bottom (see
+-- LOWBALL_SHARE) is skipped, since buyers snap those up and matching them
+-- gives coin away. Returns the price (nil when nobody else sells) and the
+-- units skipped.
+function Prices.CheapestThatCounts(listings)
+    local tiers, total = {}, 0
+    for _, l in ipairs(listings or {}) do
+        local units = (l[2] or 0) - (l[4] or (l[3] and l[2] or 0))
+        if l[1] and l[1] > 0 and units > 0 then
+            tiers[#tiers + 1] = { l[1], units }
+            total = total + units
+        end
+    end
+    if total == 0 then return nil, 0 end
+    table.sort(tiers, function(a, b) return a[1] < b[1] end)
+    -- Where the real supply starts: the price that takes the running count
+    -- of units past the lowball share.
+    local limit, seen, wall = total * Prices.LOWBALL_SHARE, 0, tiers[#tiers][1]
+    for _, t in ipairs(tiers) do
+        seen = seen + t[2]
+        if seen > limit then
+            wall = t[1]
+            break
+        end
+    end
+    local skipped = 0
+    for _, t in ipairs(tiers) do
+        if t[1] >= wall * (1 - Prices.LOWBALL_GAP) then return t[1], skipped end
+        skipped = skipped + t[2]
+    end
+    return wall, skipped
+end
+
 function Prices.Ladder(listings, market, steps)
     if not listings or #listings == 0 then return nil end
     local sorted = {}
@@ -206,6 +296,12 @@ function Prices:RecordSnapshot(snapshot)
         entry.q = item.quantity
         entry.t = snapshot.time
         entry.l = item.minBuyout
+        entry.o = item.otherMin or false
+        local counted, lowball = Prices.CheapestThatCounts(item.listings)
+        entry.oc = counted or false
+        entry.ol = lowball > 0 and lowball or nil
+        entry.md = Prices.Median(item.listings)
+        entry.tm = Prices.TrimmedMean(item.listings)
         local value = Prices.ScanValue(item.listings, share)
         if value then
             local day = entry.d[today]
@@ -226,7 +322,9 @@ function Prices:RecordSnapshot(snapshot)
         if not snapshot.items[itemID] and entry.t and entry.t < snapshot.time then
             entry.q = 0
             entry.l = nil
+            entry.o, entry.oc, entry.ol = false, false, nil
             entry.b, entry.bm = nil, nil
+            entry.md, entry.tm = nil, nil
         end
     end
     self:Prune(snapshot.key, snapshot.time)
@@ -273,8 +371,13 @@ end
 -- Prices for an item at an auction house (current house if key is nil).
 -- Returns nil if the item has never been seen, otherwise a table:
 --   market, minBuyout, quantity, lastSeen, days (days of history),
+--   cheapestOther = the latest scan's cheapest buyout per unit from other
+--   sellers (nil when there's none, or the scan predates owner tracking),
+--   cheapestCounted, lowballUnits = the same with lowball listings skipped
+--   (see Prices.CheapestThatCounts) and how many units that skipped,
 --   trend ("rising"/"falling"/"steady"/nil) and trendChange (percent),
 --   confidence (0-1, see Prices.Confidence),
+--   median, trimmed = the latest scan's median and trimmed mean unit price,
 --   ladder = { {unitPrice, units}, ... } cheapest listings of the latest
 --   scan (see the header; may be empty), ladderMore = listings left off
 function Prices:GetPrice(itemID, key)
@@ -304,6 +407,11 @@ function Prices:GetPrice(itemID, key)
         ladderMore = entry.bm == true,
         market = blend(entry.d, dayNumber(time()), self.db.global.halfLifeDays, self.db.global.lowWeight),
         minBuyout = entry.l,
+        cheapestOther = entry.o or nil,
+        cheapestCounted = entry.oc or nil,
+        lowballUnits = entry.ol or 0,
+        median = entry.md,
+        trimmed = entry.tm,
         quantity = entry.q or 0,
         lastSeen = entry.t,
         days = days,

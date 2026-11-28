@@ -3,6 +3,8 @@ local H = dofile("tests/harness.lua")
 local check = H.check
 
 local MF = H.startAddon()
+-- Market value here; Razzle's pick has its own tests (pick_test.lua).
+MF:GetModule("Post").db.global.method = "market"
 local Flip = MF:GetModule("Flip")
 local Prices = MF:GetModule("Prices")
 local Broker = MF:GetModule("Broker")
@@ -17,17 +19,18 @@ check(table.concat(flat, ",") == "10,1,20,1" and more, "ladder cut short says so
 
 local opts = Flip.db.global
 
--- The best flip: buy the 40c and 60c steps, relist under market at 1s.
+-- The best flip: buy the 40c and 60c steps, relist at market (1s 58c).
 local plan = Flip.Analyze({ market = 158, ladder = { { 40, 5 }, { 60, 10 }, { 300, 20 } } }, opts)
-check(plan and plan.units == 15 and plan.maxPrice == 60 and plan.resale == 100, "buys the cheap steps, relists at 1s")
-check(plan.net == 95 and plan.profit == 95 * 15 - 800, "profit after the 5% cut")
+check(plan and plan.units == 15 and plan.maxPrice == 60 and plan.resale == 158,
+    "buys the cheap steps, relists at market")
+check(plan.net == 150 and plan.profit == 150 * 15 - 800, "profit after the 5% cut")
 check(plan.wall == 300, "knows what's left after buying")
 
 -- Relisting undercuts the next listing when that's below market.
 plan = Flip.Analyze({ market = 50000, ladder = { { 10000, 4 }, { 30000, 2 }, { 60000, 9 } } }, opts)
 check(plan and plan.units == 6 and plan.resale == 50000, "buys both steps when relisting at market pays")
 plan = Flip.Analyze({ market = 50000, ladder = { { 10000, 4 }, { 45000, 2 }, { 60000, 9 } } }, opts)
-check(plan and plan.units == 4 and plan.resale == 44900, "undercuts the 45s step by a silver instead of buying it")
+check(plan and plan.units == 4 and plan.resale == 44999, "undercuts the 45s step by a copper instead of buying it")
 
 -- No flip: nothing cheap, margin too thin, no market, nothing listed.
 check(select(2, Flip.Analyze({ market = 1000, ladder = { { 1000, 5 } } }, opts)) == "nothingcheap", "nothing cheap")
@@ -40,7 +43,7 @@ check(select(2, Flip.Analyze({ market = 100, ladder = {} }, opts)) == "nolisting
 
 -- A ladder cut short can't plan past its last step.
 plan = Flip.Analyze({ market = 50000, ladderMore = true, ladder = { { 10000, 4 }, { 20000, 2 } } }, opts)
-check(plan and plan.units == 4 and plan.resale == 19900, "cut-short ladder stops before its last step")
+check(plan and plan.units == 4 and plan.resale == 19999, "cut-short ladder stops before its last step")
 
 -- From a real scan.
 H.vendorPrices = { [2589] = 13 }
@@ -68,8 +71,8 @@ text = H.plain(text)
 check(linen and linen.itemID == 2589, "finds an item by name")
 check(text:find("Linen Cloth: flip it, boss!", 1, true), "says flip it")
 check(text:find("Buy 15 at up to 60c each (8s in all).", 1, true), "how many and up to what price")
-check(text:find("Relist at 1s each (worth about 1s 58c).", 1, true), "relist price")
-check(text:find("Profit about 6s 25c after the house's 5% cut.", 1, true), "profit")
+check(text:find("Relist at 1s 58c each (worth about 1s 58c).", 1, true), "relist price")
+check(text:find("Profit about 14s 50c after the house's 5% cut.", 1, true), "profit")
 check(text:find("Deposit about 59c, lost only if they don't sell.", 1, true), "deposit estimate from vendor price")
 check(text:find("only 1 day of history", 1, true), "warns about short history")
 check(select(2, Flip:Advise("linen")).itemID == 2589, "partial names work")
@@ -99,7 +102,7 @@ check(H.plain(Flip:Advise("linen")):find("These listings are 2 hours old", 1, tr
 -- Best flips: big enough ones only, most profit first.
 local picks = Flip:FindFlips()
 check(#picks == 1 and picks[1].itemID == 9002, "small flips stay off the best-flips list")
-check(H.plain(Flip.PickLine(picks[1])) == "Lead Band  buy 10 to 1g, sell 1g 66s: +5g 77s", "pick line")
+check(H.plain(Flip.PickLine(picks[1])) == "Lead Band  buy 10 to 1g, sell 1g 66s 67c: +5g 83s 30c", "pick line")
 
 -- /mf flip prints the advice.
 H.clearChat()
@@ -136,7 +139,7 @@ frame.flipRows[1]:Click()
 check(frame.flipBox.text == "Linen Cloth" and H.plain(frame.flipAnswer.text):find("Linen Cloth: flip it"),
     "clicking a bag item checks it")
 check(frame.flipShow.shown and frame.flipShow.itemID == 2589, "AH button offered for the flip")
-check(H.plain(frame.flipAnswer.text):find("You've got 24 in your bags: list them at 1s each.", 1, true),
+check(H.plain(frame.flipAnswer.text):find("You've got 24 in your bags: list them at 1s 58c each.", 1, true),
     "advice for what you hold")
 -- Selling some: the checked item's advice follows the bags.
 H.bags[0][2].stackCount = 5
@@ -185,7 +188,7 @@ check(frame.flipBox.text:find("item:2589", 1, true), "no focus, no change")
 -- Best flips list.
 frame.listButtons.picks:Click()
 check(not frame.listButtons.picks.enabled and frame.listButtons.bags.enabled, "best flips list selected")
-check(H.plain(frame.flipLines[1].text) == "Lead Band  buy 10 to 1g, sell 1g 66s: +5g 77s", "best flips listed")
+check(H.plain(frame.flipLines[1].text) == "Lead Band  buy 10 to 1g, sell 1g 66s 67c: +5g 83s 30c", "best flips listed")
 frame.flipBox:SetText("Linen Cloth")
 frame.flipBox.scripts.OnEnterPressed(frame.flipBox)
 check(H.plain(frame.flipAnswer.text):find("Buy 15 at up to 60c"), "Enter checks the flip")

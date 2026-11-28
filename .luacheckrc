@@ -23,6 +23,7 @@ read_globals = {
     "ItemLocation",
     "MarketForcesRazzleFrame",
     "SetCVar",
+    "GetCVar",
     "C_AddOns",
     "C_AuctionHouse",
     "C_Container",
@@ -66,5 +67,6 @@ files["tests/"] = {
         "GetInboxHeaderInfo", "GetInboxInvoiceInfo", "GetInboxItem", "GetInboxItemLink", "GetInboxNumItems",
         "UnitName", "TSM_API", "Auctionator", "AUCTION_SOLD_MAIL_SUBJECT", "AUCTION_WON_MAIL_SUBJECT",
         "AUCTION_EXPIRED_MAIL_SUBJECT", "AUCTION_REMOVED_MAIL_SUBJECT",
+        "AUCTION_DURATION_ONE", "AUCTION_DURATION_TWO", "AUCTION_DURATION_THREE",
     },
 }

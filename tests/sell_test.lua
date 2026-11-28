@@ -3,6 +3,8 @@ local H = dofile("tests/harness.lua")
 local check = H.check
 
 local MF = H.startAddon()
+-- Market value here; Razzle's pick has its own tests (pick_test.lua).
+MF:GetModule("Post").db.global.method = "market"
 local Post = MF:GetModule("Post")
 
 -- Quantity: all you hold, unless the market holds less (at least a stack).
@@ -48,10 +50,10 @@ HandleModifiedItemClick(linen, ItemLocation:CreateFromBagAndSlot(0, 2))
 check(H.postItemSet and H.postItemSet.bag == 0 and H.postItemSet.slot == 2, "item goes in the sell slot")
 check(H.cvars.auctionHouseDurationDropdown == 2, "24 hours set as Blizzard's default")
 H.runTimers()
-check(sell.PriceInput.amount == 200, "price filled with market value (rounded to silver)")
+check(sell.PriceInput.amount == 158, "price filled with market value, copper kept")
 check(sell.QuantityInput.quantity == 24, "quantity: all 24 in your bags")
 check(sell.Duration.duration == 2, "duration dropdown set to 24 hours")
-check(H.plain(razzle.speech.text) == "Putting up 24 Linen Cloth at 2s each for 24 hours. "
+check(H.plain(razzle.speech.text) == "Putting up 24 Linen Cloth at 1s 58c each for 24 hours. "
     .. "Check it and click Post when you're happy.", "Razzle says what's set up")
 
 -- No location from Blizzard: found by item ID. More than the market holds: capped.
@@ -121,6 +123,43 @@ H.runTimers()
 check(sell.QuantityInput.quantity == 7, "declined pick doesn't change the item in the slot")
 check(H.plain(razzle.speech.text):find("didn't take Copper Ore just now"), "Razzle says it didn't take")
 H.setPostItemDeclines = false
+
+-- The client's own duration names (WoW: Forever's dropdown: 2, 8, 24 hours).
+AUCTION_DURATION_ONE, AUCTION_DURATION_TWO, AUCTION_DURATION_THREE = "2 Hours", "8 Hours", "24 Hours"
+H.slash("duration 24")
+check(MF.Post.db.global.duration == 3 and H.chatHas("Razzle will list for 24 hours"),
+    "/mf duration uses the client's hours")
+H.slash("duration 12")
+check(MF.Post.db.global.duration == 3 and H.chatHas("Use /mf duration 2, 8 or 24"), "unknown hours explained")
+H.slash("duration 8")
+HandleModifiedItemClick(linen, ItemLocation:CreateFromBagAndSlot(0, 2))
+check(H.plain(razzle.speech.text):find("for 8 hours.", 1, true), "Razzle names the dropdown's duration")
+-- The dropdown lands on another duration than Razzle's: Razzle says what it shows.
+local realGet = sell.Duration.GetDuration
+sell.Duration.GetDuration = function() return 1 end
+HandleModifiedItemClick(linen, ItemLocation:CreateFromBagAndSlot(0, 2))
+H.runTimers()
+check(H.plain(razzle.speech.text):find("for 2 hours.", 1, true), "Razzle reads the duration actually selected")
+sell.Duration.GetDuration = realGet
+
+-- You pick another duration in Blizzard's dropdown afterwards: Razzle keeps up.
+HandleModifiedItemClick(linen, ItemLocation:CreateFromBagAndSlot(0, 2))
+H.runTimers()
+check(H.plain(razzle.speech.text):find("for 8 hours.", 1, true), "starts at 8 hours")
+sell.Duration.duration = 3 -- the player's choice in the dropdown
+sell:OnDurationUpdated()
+check(H.plain(razzle.speech.text):find("Putting up 24 Linen Cloth at 1s 58c each for 24 hours.", 1, true),
+    "Razzle follows the dropdown live")
+H.chat = {}
+local before = razzle.speech.text
+sell:OnDurationUpdated()
+check(razzle.speech.text == before, "no change, nothing said again")
+-- Another item in the slot since: the old line isn't brought back.
+sell:SetItem({ itemID = 2770 })
+razzle.speech:SetText("something else")
+sell.Duration.duration = 1
+sell:OnDurationUpdated()
+check(razzle.speech.text == "something else", "a newer item's slot isn't talked over")
 
 -- Away from the AH: nothing.
 H.closeAuctionHouse()

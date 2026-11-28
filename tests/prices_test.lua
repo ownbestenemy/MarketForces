@@ -170,4 +170,14 @@ do
     check(C({ d = {} }, now) == 0, "no history, no confidence")
 end
 
+-- Median and trimmed mean count every unit.
+local P = MF:GetModule("Prices")
+local ladder = { { 300, 20 }, { 150, 5 }, { 200, 10 } }
+check(P.Median(ladder) == 300, "median: the 18th of 35 units")
+check(P.Median({ { 100, 1 }, { 900, 1 } }) == 100 and P.Median({}) == nil, "median of two; none")
+-- 35 units, 3 dropped each end: 2 at 150, 10 at 200, 17 at 300 -> 7400 / 29
+check(P.TrimmedMean(ladder) == 255, "trimmed mean drops the cheapest and dearest 10%")
+check(P.TrimmedMean({ { 500, 1 } }) == 500 and P.TrimmedMean({}) == nil, "trimmed mean of one; none")
+check(P.TrimmedMean({ { 100, 9 }, { 10000, 1 } }) == 100, "one silly listing trimmed away")
+
 H.finish("prices")

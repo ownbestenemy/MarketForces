@@ -9,8 +9,10 @@ help are built.
 Open the auction house and Razzle's window docks beside it; click **Full
 Scan** (or type `/mf scan`) and Razzle points out bargains. Item tooltips,
 Razzle's price check box and `/mf razzle` (anywhere in the world) show what
-things are worth. Put an item in the sell slot and Razzle fills in its
-market value; you click Post.
+things are worth. Put an item in the sell slot and Razzle fills in a price
+that sells (Razzle's pick: match the cheapest seller for cloth, ore and
+potions, 1c under for gear, never chasing a few lowball listings or going
+under 80% of market value); you click Post.
 
 ## Design: Razzle's Dazzles
 
@@ -66,9 +68,10 @@ game with `/dump select(4, GetBuildInfo())` and update `## Interface:` in
 | `/mf version` | Show the addon version |
 | `/mf scan` | Full scan of the open auction house (same as the Full Scan button) |
 | `/mf scan force` | Try a scan before the 15 minute wait is up (same as shift-clicking Full Scan); once a minute at most |
-| `/mf autofill` | Toggle Razzle filling in sell prices with market value |
+| `/mf autofill` | Toggle Razzle filling in sell prices |
+| `/mf pricing <method>` | How Razzle prices sales: pick (default), market, median, trimmed, undercut, match or history |
 | `/mf shiftsell` | Toggle shift-clicking a bag item at the auction house to put it up for sale |
-| `/mf duration 12\|24\|48` | Sell duration Razzle sets up (24 hours by default) |
+| `/mf duration <hours>` | Sell duration Razzle sets up, in the hours Blizzard's dropdown offers (its middle choice by default) |
 | `/mf price <item>` | Market value and cheapest current listing (shift-click an item, or give its ID) |
 | `/mf tooltip` | Turn prices on item tooltips on or off |
 | `/mf advice` | Turn Razzle's buy / auction / vendor advice on tooltips on or off |
@@ -97,7 +100,7 @@ Modules/           feature modules (see Modules/README.md)
   Scan.lua         full auction house scan, one per click
   Prices.lua       price history, market value, pruning
   Tooltip.lua      prices on item tooltips
-  Post.lua         fills in sell prices with market value (you click Post)
+  Post.lua         fills in sell prices by your pricing method (you click Post)
   Flip.lua         flip advice: what to buy cheap, what to relist at, profit
   Broker.lua       Razzle's window: greetings, bargains, price checks, flips tab
   BrokerSell.lua   Razzle's Sell tab: bags, competing listings, your results

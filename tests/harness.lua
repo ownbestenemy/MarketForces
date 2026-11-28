@@ -99,7 +99,7 @@ local function newRegion(kind, name, parent)
     function r:CreateFontString() return newRegion("FontString", nil, self) end
     function r:CreateTexture() return newRegion("Texture", nil, self) end
     for _, method in ipairs({
-        "SetSize", "SetWidth", "SetFrameStrata", "SetFrameLevel", "SetClampedToScreen", "EnableMouse",
+        "SetSize", "SetWidth", "SetHeight", "SetFrameStrata", "SetFrameLevel", "SetClampedToScreen", "EnableMouse",
         "SetMovable", "RegisterForDrag", "StartMoving", "StopMovingOrSizing", "SetJustifyH", "SetWordWrap",
         "SetTexture", "SetAutoFocus", "ClearFocus",
     }) do
@@ -136,7 +136,8 @@ C_Item = {
         local sell = H.vendorPrices and H.vendorPrices[itemID]
         if not name and not sell then return nil end
         local icon = H.itemIcons and H.itemIcons[itemID] or 0
-        return name, nil, 1, 1, 1, "", "", 1, "", icon, sell or 0
+        local stack = H.stackSizes and H.stackSizes[itemID] or 1
+        return name, nil, 1, 1, 1, "", "", stack, "", icon, sell or 0
     end,
     RequestLoadItemDataByID = function(itemID)
         H.itemRequests = H.itemRequests or {}
@@ -205,7 +206,7 @@ C_AuctionHouse = {
         local a = H.auctions[index + 1]
         if not a then return nil end
         return "Item " .. a.itemID, 0, a.count, 1, true, 1, 0, a.bid or 0, 0, a.buyout or 0,
-            0, false, nil, "Seller", "Seller-Realm", 0, a.itemID, true
+            0, false, nil, a.owner or "Seller", a.owner or "Seller-Realm", 0, a.itemID, true
     end,
 }
 
@@ -220,7 +221,12 @@ local function addSellFrames(window)
         local sell = CreateFrame("Frame", nil, window)
         sell.PriceInput = { amount = 0, SetAmount = function(self, v) self.amount = v end }
         sell.QuantityInput = { SetQuantity = function(self, v) self.quantity = v end }
-        sell.Duration = { SetDuration = function(self, v) self.duration = v end }
+        sell.Duration = {
+            SetDuration = function(self, v) self.duration = v end,
+            GetDuration = function(self) return self.duration end,
+        }
+        -- Blizzard calls this when the dropdown's choice changes.
+        function sell.OnDurationUpdated() end
         function sell.SetItem(self, location)
             self.item = location
             self.PriceInput:SetAmount(H.blizzardDefaultPrice or 0)
