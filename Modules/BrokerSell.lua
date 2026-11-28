@@ -162,7 +162,7 @@ function Broker:SellPricing(itemID)
     local live = self:LiveListings(itemID)
     local options, p = post:PriceOptions(itemID, live)
     local price, _, method = post:Suggest(itemID, live)
-    local chosen = post.METHOD_LABEL[post.db.global.method] and post.db.global.method or "market"
+    local chosen = post:Method()
     local count = MF.Flip and MF.Flip.CountInBags(itemID) or 0
     local out = { rows = {}, count = count, method = method, chosen = chosen, price = price, breakdown = {} }
     for _, m in ipairs(post.METHODS) do
@@ -176,7 +176,9 @@ function Broker:SellPricing(itemID)
         }
     end
     if price and method ~= chosen then
-        out.breakdown[1] = GREY .. "Market value until " .. post.METHOD_LABEL[chosen]:lower() .. " has a number|r"
+        out.breakdown[1] = GREY .. "Market value until " .. post.MethodName(chosen) .. " has a number|r"
+    elseif price and method == "pick" then
+        out.breakdown[1] = GREY .. post:Reason(method, options) .. "|r"
     end
     if price and count > 0 then
         local total = price * count
@@ -332,7 +334,7 @@ function Broker:PickPriceMethod(key)
     if not (f and post and post:IsEnabled() and post.METHOD_LABEL[key]) then return end
     post.db.global.method = key
     local label = post.METHOD_LABEL[key]
-    local line = "Pricing by " .. label:lower() .. " from now on."
+    local line = "Pricing by " .. post.MethodName(key) .. " from now on."
     local itemID = self.sellItem
     if itemID then
         local price, _, used = post:Suggest(itemID, self:LiveListings(itemID))

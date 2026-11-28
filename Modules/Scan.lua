@@ -17,7 +17,8 @@
 --                     (nil if only you, or nobody, list one with a buyout),
 --         quantity  = units listed,
 --         auctions  = number of listings,
---         listings  = { {unitBuyout, count}, ... } for buyout listings,
+--         listings  = { {unitBuyout, count, yours}, ... } for buyout
+--                     listings (yours = true for your own),
 --     }
 -- The snapshot is not saved here; the Prices module turns it into history.
 local _, MF = ...
@@ -184,11 +185,12 @@ function Scan:REPLICATE_ITEM_LIST_UPDATE()
                 item.auctions = item.auctions + 1
                 if buyout and buyout > 0 then
                     local unit = math.floor(buyout / count)
-                    item.listings[#item.listings + 1] = { unit, count }
+                    local yours = mine(owner, ownerFull)
+                    item.listings[#item.listings + 1] = { unit, count, yours or nil }
                     if not item.minBuyout or unit < item.minBuyout then
                         item.minBuyout = unit
                     end
-                    if not mine(owner, ownerFull) and (not item.otherMin or unit < item.otherMin) then
+                    if not yours and (not item.otherMin or unit < item.otherMin) then
                         item.otherMin = unit
                     end
                 end

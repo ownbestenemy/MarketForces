@@ -5,6 +5,8 @@ local check = H.check
 function UnitName() return "Mark" end
 
 local MF = H.startAddon()
+-- These checks follow market value; Razzle's pick has its own below.
+MF.Post.db.global.method = "market"
 local Broker = MF:GetModule("Broker")
 local History = MF:GetModule("History")
 
@@ -97,12 +99,13 @@ local function rowIs(i, label, each, total, what)
     check(l == label and e == each and t == total, what .. " (got " .. l .. " | " .. e .. " | " .. t .. ")")
 end
 check(frame.sellHeadEach.text == "per unit" and frame.sellHeadTotal.text == "your 20", "column heads")
-rowIs(1, "> Market value", "1s 77c", "35s 40c", "market value in use, copper kept")
-rowIs(2, "Median", "3s", "60s", "median of the scan")
-rowIs(3, "Trimmed mean", "2s 55c", "51s", "trimmed mean of the scan")
-rowIs(4, "Undercut", "1s 49c", "29s 80c", "undercut 1c under the cheapest")
-rowIs(5, "Match cheapest", "1s 50c", "30s", "match to the copper")
-rowIs(6, "Your sales", "2s", "40s", "your sales' average")
+rowIs(2, "> Market value", "1s 77c", "35s 40c", "market value in use, copper kept")
+rowIs(3, "Median", "3s", "60s", "median of the scan")
+rowIs(4, "Trimmed mean", "2s 55c", "51s", "trimmed mean of the scan")
+rowIs(5, "Undercut", "1s 49c", "29s 80c", "undercut 1c under the cheapest")
+rowIs(6, "Match cheapest", "1s 50c", "30s", "match to the copper")
+rowIs(7, "Your sales", "2s", "40s", "your sales' average")
+rowIs(1, "Razzle's pick", "1s 50c", "30s", "Razzle's pick matches the cheapest linen")
 check(H.plain(frame.sellBreakdown[1].text) == "Your 20 at 1s 77c: 35s 40c, 33s 63c after the cut",
     "what your copies bring")
 check(frame.sellBreakdown[2].text == "" or H.plain(frame.sellBreakdown[2].text):find("^Market's"),
@@ -132,9 +135,9 @@ check(H.plain(frame.sellListLines[1].text) == "15 at 1s 40c", "live listings mer
 check(H.plain(frame.sellListLines[2].text) == "4 at 1s 80c (yours)", "your live listing marked")
 check(frame.sellListPcts[2].text == Broker.VsMarket(180, linenMarket), "vs market for live listings")
 check(frame.sellListPcts[3].text == "", "empty rows have no percent")
-rowIs(2, "Median", "1s 40c", "28s", "median of the live listings")
-rowIs(5, "Match cheapest", "1s 40c", "28s", "match ignores your own listing")
-rowIs(4, "Undercut (floor)", "1s 42c", "28s 40c", "undercut held at 80% of market")
+rowIs(3, "Median", "1s 40c", "28s", "median of the live listings")
+rowIs(6, "Match cheapest", "1s 40c", "28s", "match ignores your own listing")
+rowIs(5, "Undercut (floor)", "1s 42c", "28s 40c", "undercut held at 80% of market")
 
 -- Live results are authoritative even when empty: no competitors, no match.
 local empty = MF.Post:PriceOptions(2589, {})
@@ -143,14 +146,14 @@ check(empty.match == nil and empty.undercut == nil and empty.median == nil and e
 
 -- Pick a pricing method: remembered, and put in the sell slot holding linen.
 sell.PriceInput.amount = 0
-frame.sellMethodRows[2]:Click()
+frame.sellMethodRows[3]:Click()
 check(MF.Post.db.global.method == "median", "median chosen")
 check(sell.PriceInput.amount == 140, "median price put in the sell slot")
 check(H.plain(frame.speech.text)
     == "Pricing by median from now on. Set 1s 40c each. Click Post when you're happy, boss.",
     "Razzle says so")
-rowIs(1, "Market value", "1s 77c", "35s 40c", "market no longer marked")
-rowIs(2, "> Median", "1s 40c", "28s", "median marked")
+rowIs(2, "Market value", "1s 77c", "35s 40c", "market no longer marked")
+rowIs(3, "> Median", "1s 40c", "28s", "median marked")
 check(H.plain(frame.sellBreakdown[1].text) == "Your 20 at 1s 40c: 28s, 26s 60c after the cut",
     "breakdown follows the method")
 -- Razzle's own fill-in (the item put in the slot again) uses the live median too.
@@ -158,7 +161,7 @@ sell.PriceInput.amount = 0
 sell:SetItem({ itemID = 2589, bag = 0, slot = 1 })
 H.runTimers()
 check(sell.PriceInput.amount == 140, "automatic fill agrees with the live price shown")
-frame.sellMethodRows[1]:Click()
+frame.sellMethodRows[2]:Click()
 check(MF.Post.db.global.method == "market" and sell.PriceInput.amount == 177, "back to market value")
 H.slash("pricing trimmed")
 check(MF.Post.db.global.method == "trimmed", "/mf pricing sets the method")
@@ -179,16 +182,16 @@ H.runTimers()
 check(Broker.sellItem == 2770 and Broker.sellLive == nil, "tab follows the sell slot; old live listings dropped")
 check(H.plain(frame.sellItemName.text) == "Copper Ore", "ore shown")
 check(H.plain(frame.sellResultLines[1].text):find("No results for this yet"), "no results for ore")
-rowIs(6, "Your sales", "-", "", "no sales: no number")
-frame.sellMethodRows[6]:Click()
+rowIs(7, "Your sales", "-", "", "no sales: no number")
+frame.sellMethodRows[7]:Click()
 check(H.plain(frame.speech.text):find("Your sales has no number for Copper Ore yet, so it's market value", 1, true),
     "falls back to market and says so")
 check(sell.PriceInput.amount == 10000, "market value used instead")
-rowIs(6, "> Your sales", "-", "", "your choice stays marked")
+rowIs(7, "> Your sales", "-", "", "your choice stays marked")
 check(H.plain(frame.sellBreakdown[1].text) == "Market value until your sales has a number", "breakdown says why")
-frame.sellMethodRows[1]:Click()
+frame.sellMethodRows[2]:Click()
 check(frame.sellHeadTotal.text == "your 4", "total for the 4 ore you hold")
-rowIs(1, "> Market value", "1g", "4g", "ore per unit and for your 4")
+rowIs(2, "> Market value", "1g", "4g", "ore per unit and for your 4")
 -- More ore than the market holds: the tab says how many Razzle would put up.
 H.bags[0][4] = { itemID = 2770, stackCount = 36 }
 Broker:RefreshSell()
@@ -229,7 +232,7 @@ H.fire("ITEM_SEARCH_RESULTS_UPDATED", { itemID = 9003 })
 check(H.plain(frame.sellListLines[1].text) == "1 at 5g" and frame.sellListLines[2].text == "",
     "gear listings read; bid-only left out")
 check(frame.sellSource.text == "Live from the auction house", "gear live")
-check(frame.sellHeadTotal.text == "" and H.plain(frame.sellMethodRows[1].total.text) == "",
+check(frame.sellHeadTotal.text == "" and H.plain(frame.sellMethodRows[2].total.text) == "",
     "one sword: no total column")
 
 -- Broker turned off and on: live listings can't survive it.

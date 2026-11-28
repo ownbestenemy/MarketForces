@@ -218,6 +218,46 @@ function Prices.ConfidenceLabel(score)
 end
 
 -- The cheapest listings as a flat ladder (see the header), or nil, more.
+-- Lowball listings Razzle's pick doesn't chase: the cheapest listings, if
+-- together they're at most this share of other sellers' units and sit more
+-- than LOWBALL_GAP under the price where the real supply starts.
+Prices.LOWBALL_SHARE, Prices.LOWBALL_GAP = 0.1, 0.1
+
+-- Other sellers' cheapest price that counts, from { unitPrice, units,
+-- yours, yourUnits } listings (yours = all of it is yours unless yourUnits
+-- says how many): a thin layer of lowball listings at the bottom (see
+-- LOWBALL_SHARE) is skipped, since buyers snap those up and matching them
+-- gives coin away. Returns the price (nil when nobody else sells) and the
+-- units skipped.
+function Prices.CheapestThatCounts(listings)
+    local tiers, total = {}, 0
+    for _, l in ipairs(listings or {}) do
+        local units = (l[2] or 0) - (l[4] or (l[3] and l[2] or 0))
+        if l[1] and l[1] > 0 and units > 0 then
+            tiers[#tiers + 1] = { l[1], units }
+            total = total + units
+        end
+    end
+    if total == 0 then return nil, 0 end
+    table.sort(tiers, function(a, b) return a[1] < b[1] end)
+    -- Where the real supply starts: the price that takes the running count
+    -- of units past the lowball share.
+    local limit, seen, wall = total * Prices.LOWBALL_SHARE, 0, tiers[#tiers][1]
+    for _, t in ipairs(tiers) do
+        seen = seen + t[2]
+        if seen > limit then
+            wall = t[1]
+            break
+        end
+    end
+    local skipped = 0
+    for _, t in ipairs(tiers) do
+        if t[1] >= wall * (1 - Prices.LOWBALL_GAP) then return t[1], skipped end
+        skipped = skipped + t[2]
+    end
+    return wall, skipped
+end
+
 function Prices.Ladder(listings, market, steps)
     if not listings or #listings == 0 then return nil end
     local sorted = {}
@@ -257,6 +297,9 @@ function Prices:RecordSnapshot(snapshot)
         entry.t = snapshot.time
         entry.l = item.minBuyout
         entry.o = item.otherMin or false
+        local counted, lowball = Prices.CheapestThatCounts(item.listings)
+        entry.oc = counted or false
+        entry.ol = lowball > 0 and lowball or nil
         entry.md = Prices.Median(item.listings)
         entry.tm = Prices.TrimmedMean(item.listings)
         local value = Prices.ScanValue(item.listings, share)
@@ -279,7 +322,7 @@ function Prices:RecordSnapshot(snapshot)
         if not snapshot.items[itemID] and entry.t and entry.t < snapshot.time then
             entry.q = 0
             entry.l = nil
-            entry.o = false
+            entry.o, entry.oc, entry.ol = false, false, nil
             entry.b, entry.bm = nil, nil
             entry.md, entry.tm = nil, nil
         end
@@ -330,6 +373,8 @@ end
 --   market, minBuyout, quantity, lastSeen, days (days of history),
 --   cheapestOther = the latest scan's cheapest buyout per unit from other
 --   sellers (nil when there's none, or the scan predates owner tracking),
+--   cheapestCounted, lowballUnits = the same with lowball listings skipped
+--   (see Prices.CheapestThatCounts) and how many units that skipped,
 --   trend ("rising"/"falling"/"steady"/nil) and trendChange (percent),
 --   confidence (0-1, see Prices.Confidence),
 --   median, trimmed = the latest scan's median and trimmed mean unit price,
@@ -363,6 +408,8 @@ function Prices:GetPrice(itemID, key)
         market = blend(entry.d, dayNumber(time()), self.db.global.halfLifeDays, self.db.global.lowWeight),
         minBuyout = entry.l,
         cheapestOther = entry.o or nil,
+        cheapestCounted = entry.oc or nil,
+        lowballUnits = entry.ol or 0,
         median = entry.md,
         trimmed = entry.tm,
         quantity = entry.q or 0,

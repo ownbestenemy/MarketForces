@@ -1,9 +1,18 @@
 -- MarketForces Post module.
 --
 -- When you put an item in the auction house's sell slot, Razzle fills in
--- the price box using the pricing method you picked (default: the item's
--- smoothed market value, Mark's choice: steady prices, no racing
--- undercutters). The methods, after the ones seller addons offer:
+-- the price box using the pricing method you picked (default: Razzle's
+-- pick, priced to sell). The methods, after the ones seller addons offer:
+--   pick      Razzle's pick, a broker's price: WoW: Forever's auction house
+--             pools commodities (cloth, ore, potions) by price, sells the
+--             cheapest units first and, at one price, the newest listing
+--             first, so Razzle matches the cheapest other seller; gear is
+--             listed one by one, so 1 copper under it. A thin layer of
+--             lowball listings at the bottom (5 units out of 100 at half
+--             price) isn't chased: Razzle prices against where the real
+--             supply starts (Prices.CheapestThatCounts). Never under 80% of
+--             market value (undercutFloor); with nobody else selling, it's
+--             market value.
 --   market    Razzle's smoothed market value (see Prices.lua)
 --   median    the median unit price of the listings
 --   trimmed   the average unit price with the cheapest and dearest 10% of
@@ -33,7 +42,7 @@ local Post = MF:NewModule("Post", {
         shiftSell = true, -- shift-click a bag item at the AH to put it up for sale
         duration = 2,     -- Blizzard's duration choice 1, 2 or 3 (the middle one by default);
                           -- what each means comes from the client (see Post.DurationName)
-        method = "market", -- pricing method, see the header
+        method = "pick",  -- pricing method, see the header
         undercutFloor = 0.8, -- undercut never goes below this share of market value
     },
 })
@@ -49,6 +58,7 @@ end
 
 -- Pricing methods in the order Razzle lists them.
 Post.METHODS = {
+    { key = "pick", label = "Razzle's pick" },
     { key = "market", label = "Market value" },
     { key = "median", label = "Median" },
     { key = "trimmed", label = "Trimmed mean" },
@@ -59,6 +69,40 @@ Post.METHODS = {
 local METHOD_LABEL = {}
 for _, m in ipairs(Post.METHODS) do METHOD_LABEL[m.key] = m.label end
 Post.METHOD_LABEL = METHOD_LABEL
+
+-- A method's name in a sentence: "median", "Razzle's pick".
+function Post.MethodName(key)
+    local label = METHOD_LABEL[key] or METHOD_LABEL.market
+    return key == "pick" and label or label:lower()
+end
+
+-- The pricing method in use (the saved one if it's still a method).
+function Post:Method()
+    local method = self.db.global.method
+    return METHOD_LABEL[method] and method or "pick"
+end
+
+-- Whether an item is a commodity (pooled by price: cloth, ore, potions)
+-- rather than listed one by one (gear). Asks the auction house, falling
+-- back to whether it stacks in your bags.
+function Post.IsCommodity(itemID)
+    local AH = C_AuctionHouse
+    if AH and AH.MakeItemKey and AH.GetItemKeyInfo then
+        local ok, info = pcall(function() return AH.GetItemKeyInfo(AH.MakeItemKey(itemID)) end)
+        if ok and type(info) == "table" and info.isCommodity ~= nil then return info.isCommodity == true end
+    end
+    local getInfo = (C_Item and C_Item.GetItemInfo) or GetItemInfo
+    local size = getInfo and tonumber((select(8, getInfo(itemID))))
+    return (size or 1) > 1
+end
+
+-- Why Razzle's pick is what it is, by out.pickWhy (see PriceOptions).
+local PICK_REASON = {
+    match = "Matching the cheapest%s: same price, and the newest listing sells first",
+    undercut = "1c under the cheapest listing%s",
+    floor = "The cheapest is dumping, so I held at %d%% of market",
+    market = "Nobody else is selling, so it's market value",
+}
 
 -- Every method's price per unit (raw copper, nil when it has no number)
 -- for an item at the current auction house. listings: optional live
@@ -71,8 +115,9 @@ function Post:PriceOptions(itemID, listings)
     local p = prices and prices:IsEnabled() and itemID and prices:GetPrice(itemID) or nil
     local market = p and p.market
     out.market = market
-    local cheapest
+    local cheapest, counted, lowball
     if listings then
+        counted, lowball = MF.Prices.CheapestThatCounts(listings)
         out.median = MF.Prices.Median(listings)
         out.trimmed = MF.Prices.TrimmedMean(listings)
         -- Other sellers' cheapest: a price counts if anyone else has units there.
@@ -84,6 +129,7 @@ function Post:PriceOptions(itemID, listings)
         -- The scan's cheapest from other sellers, so your own auction is
         -- never undercut or matched as if it were a competitor's.
         out.median, out.trimmed, cheapest = p.median, p.trimmed, p.cheapestOther
+        counted, lowball = p.cheapestCounted, p.lowballUnits
     end
     if cheapest then
         -- Match is the cheapest to the copper; undercut is 1c under it,
@@ -93,6 +139,17 @@ function Post:PriceOptions(itemID, listings)
         local minimum = market and math.ceil(market * (self.db.global.undercutFloor or 0)) or 0
         out.undercut = math.max(under, minimum, 1)
         out.undercutFloored = under < minimum
+        -- Razzle's pick: match commodities, undercut gear, against the
+        -- cheapest that counts (lowball listings skipped), same floor.
+        local base = counted or cheapest
+        local commodity = itemID and Post.IsCommodity(itemID)
+        local want = commodity and base or base - 1
+        out.pickWhy = commodity and "match" or "undercut"
+        if counted and lowball and lowball > 0 then out.lowball = lowball end
+        if want < minimum then want, out.pickWhy, out.lowball = minimum, "floor", nil end
+        out.pick = math.max(want, 1)
+    elseif market then
+        out.pick, out.pickWhy = market, "market"
     end
     local history = MF.History
     local stats = history and history:IsEnabled() and itemID and history:ItemStats(itemID)
@@ -103,8 +160,8 @@ end
 -- The suggested buyout per unit for an item at the current auction house,
 -- by the chosen pricing method (falling back to market value), rounded to
 -- whole copper (at least 1c).
--- Returns the price (nil when there's nothing to go on), Prices' entry, and
--- the method used.
+-- Returns the price (nil when there's nothing to go on), Prices' entry, the
+-- method used and every method's options (see PriceOptions).
 function Post:Suggest(itemID, listings)
     if not itemID then return nil end
     -- Live listings Razzle's Sell tab has for this item, so the price filled
@@ -113,12 +170,30 @@ function Post:Suggest(itemID, listings)
         listings = MF.Broker:LiveListings(itemID)
     end
     local options, p = self:PriceOptions(itemID, listings)
-    local method = self.db.global.method or "market"
-    if not METHOD_LABEL[method] then method = "market" end
+    local method = self:Method()
     local value = options[method]
     if not value then method, value = "market", options.market end
     if not value then return nil, p end
-    return Post.RoundPrice(value), p, method
+    return Post.RoundPrice(value), p, method, options
+end
+
+-- Razzle's reason for a price, in a few words, or nil for market value
+-- (Razzle says that one its own way).
+function Post:Reason(method, options)
+    if method == "pick" and options and options.pickWhy then
+        local why, n = options.pickWhy, options.lowball
+        if why == "floor" then
+            return string.format(PICK_REASON.floor, math.floor((self.db.global.undercutFloor or 0) * 100 + 0.5))
+        elseif why == "market" then
+            return PICK_REASON.market
+        end
+        local text = string.format(PICK_REASON[why], n and " that counts" or "")
+        if n then
+            text = text .. string.format(". I skipped %d lowball %s under it", n, n == 1 and "unit" or "units")
+        end
+        return text
+    end
+    if method ~= "market" and METHOD_LABEL[method] then return "Priced by " .. Post.MethodName(method) end
 end
 
 local function itemIDFrom(itemLocation)
@@ -145,8 +220,8 @@ function Post:OnItemSet(sellFrame, itemLocation)
     selected[sellFrame] = itemID
     if not self:IsEnabled() then return end
     if not itemID then return end
-    local suggestion, p = self:Suggest(itemID)
-    self:SendMessage("MF_POST_ITEM_SELECTED", itemID, suggestion, p)
+    local suggestion, p, method, options = self:Suggest(itemID)
+    self:SendMessage("MF_POST_ITEM_SELECTED", itemID, suggestion, p, self:Reason(method, options))
     if not (suggestion and self.db.global.fillPrice) then return end
     -- Blizzard fills in its own default price right after SetItem; set ours
     -- on the next frame so it sticks.
@@ -410,11 +485,12 @@ function Post:OnInitialize()
             or "no longer puts items up for sale")
     end)
     MF:RegisterSlashCommand("pricing",
-        "How Razzle prices sales: /mf pricing market, median, trimmed, undercut, match or history", function(args)
+        "How Razzle prices sales: /mf pricing pick, market, median, trimmed, undercut, match or history",
+        function(args)
         local key = (args or ""):lower():match("^%s*(%S*)")
         if not METHOD_LABEL[key] then
-            MF:Print("Use /mf pricing market, median, trimmed, undercut, match or history. Now:",
-                METHOD_LABEL[Post.db.global.method] or METHOD_LABEL.market)
+            MF:Print("Use /mf pricing pick, market, median, trimmed, undercut, match or history. Now:",
+                METHOD_LABEL[Post:Method()])
             return
         end
         Post.db.global.method = key

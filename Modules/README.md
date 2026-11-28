@@ -77,7 +77,7 @@ search, never posts: the Post click is the player's.
 
 The Sell tab's third column, **Pricing**, lists every pricing method's price
 per unit and for all your copies, with the one in use marked:
-market value, median, trimmed mean (cheapest and dearest 10% of units left
+**Razzle's pick** (the default, below), market value, median, trimmed mean (cheapest and dearest 10% of units left
 out), undercut (1 copper below the cheapest other listing,
 never under 80% of market value), match cheapest (to the copper) and your sales (your average sale price from History). Median,
 trimmed mean, undercut and match use the live listings when the tab has
@@ -93,9 +93,22 @@ auction house, so there are no stacks: a commodity (cloth, ore, potions) is
 posted as one quantity at one price per unit, and buyers take the cheapest
 units first. Then your results from History.
 
+**Razzle's pick** prices to sell. Commodities pool by price, the cheapest
+units sell first and, at one price, the newest listing sells first, so
+Razzle matches the cheapest other seller; gear is listed one by one, so it
+goes 1 copper under. A thin layer of lowball listings at the bottom isn't
+chased (`Prices.CheapestThatCounts`): listings that together make up at
+most 10% of other sellers' units and sit more than 10% under the price
+where the rest of the supply starts are skipped, so 5 units out of 100 at
+half price don't drag your price down. It never goes under 80% of market
+value, and with nobody else selling it's market value. Razzle says which
+of these it did, in the sell slot's speech and under the methods. Scan data
+keeps the cheapest that counts per item too (`entry.oc`, skipped units in
+`entry.ol`).
+
 Post hooks Blizzard's sell frames (`ItemSellFrame`, `CommoditiesSellFrame`).
 When an item goes in, it sets the price box to the chosen pricing method's
-price (market value by default), to the copper, one frame after Blizzard sets its default. It never calls
+price (Razzle's pick by default), to the copper, one frame after Blizzard sets its default. It never calls
 a posting function: the Post click is always the player's. `/mf autofill`
 turns the fill-in off and leaves Razzle's advice.
 

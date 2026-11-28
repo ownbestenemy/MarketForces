@@ -86,16 +86,22 @@ function Broker.Greeting(info)
         Util.FormatDuration(info.age), info.deals, info.deals == 1 and "bargain" or "bargains")
 end
 
--- What Razzle says when you put an item in the sell slot.
-function Broker.PostLine(itemID, suggestion, p, filled)
+-- What Razzle says when you put an item in the sell slot. reason: why the
+-- price is what it is (Post:Reason), nil for market value.
+function Broker.PostLine(itemID, suggestion, p, filled, reason)
     local name = Broker.ItemName(itemID)
     if not suggestion then
         return "Selling " .. name .. "? I've got no steady price for it here yet. Price it by hand, "
             .. "and a scan or two will teach me."
     end
-    local line = string.format("Selling %s? Market value's %s each.", name, Util.FormatMoney(suggestion))
-    if p and p.minBuyout then
-        line = line .. " Cheapest listed right now is " .. Util.FormatMoney(p.minBuyout) .. "."
+    local line
+    if reason then
+        line = string.format("Selling %s? %s each. %s.", name, Util.FormatMoney(suggestion), reason)
+    else
+        line = string.format("Selling %s? Market value's %s each.", name, Util.FormatMoney(suggestion))
+        if p and p.minBuyout then
+            line = line .. " Cheapest listed right now is " .. Util.FormatMoney(p.minBuyout) .. "."
+        end
     end
     if filled then
         line = line .. " I put my number in. Your call, boss: click Post when you're happy."
@@ -254,7 +260,7 @@ Broker.TABS = { "Bargains", "Flips", "Sell" }
 Broker.SELL_BAGS_WIDTH, Broker.SELL_LISTINGS_WIDTH, Broker.SELL_PRICING_WIDTH = 236, 216, 300
 Broker.WIDTH = 320
 Broker.WIDE = 12 + Broker.SELL_BAGS_WIDTH + 12 + Broker.SELL_LISTINGS_WIDTH + 12 + Broker.SELL_PRICING_WIDTH + 12
-Broker.HEIGHT, Broker.TALL = 480, 620
+Broker.HEIGHT, Broker.TALL = 480, 640
 Broker.FLIP_ROWS = 6
 
 function Broker:CreateWindow()
@@ -709,12 +715,12 @@ function Broker:MF_POST_SAYS(_, line)
     if self.frame and self.frame:IsShown() then self.frame.speech:SetText(line) end
 end
 
-function Broker:MF_POST_ITEM_SELECTED(_, itemID, suggestion, p)
+function Broker:MF_POST_ITEM_SELECTED(_, itemID, suggestion, p, reason)
     -- Whatever goes in the sell slot is what the Sell tab looks at.
     if self.SelectSellItem then self:SelectSellItem(itemID) end
     if not (self.frame and self.frame:IsShown()) then return end
     local filled = suggestion and MF.Post and MF.Post.db.global.fillPrice
-    self.frame.speech:SetText(self.PostLine(itemID, suggestion, p, filled))
+    self.frame.speech:SetText(self.PostLine(itemID, suggestion, p, filled, reason))
 end
 
 -- An item the board was waiting on has loaded: refill the board once, a

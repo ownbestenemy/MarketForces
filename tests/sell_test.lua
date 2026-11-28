@@ -3,6 +3,8 @@ local H = dofile("tests/harness.lua")
 local check = H.check
 
 local MF = H.startAddon()
+-- Market value here; Razzle's pick has its own tests (pick_test.lua).
+MF:GetModule("Post").db.global.method = "market"
 local Post = MF:GetModule("Post")
 
 -- Quantity: all you hold, unless the market holds less (at least a stack).
