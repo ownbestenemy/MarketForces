@@ -12,7 +12,8 @@
 --             but never under 80% of market value (undercutFloor)
 --   match     the cheapest other listing (rounded down to whole silver)
 --   history   what your own sales averaged (from your auction mail)
--- Listings are live from the auction house when Razzle's Sell tab has them,
+-- Listings are live from the auction house when Razzle's Sell tab has them
+-- (also when Razzle fills in a price by itself),
 -- otherwise the latest scan's. A method with no number yet falls back to
 -- market value. You check it and click Blizzard's own Post button; this
 -- module never posts, buys or cancels anything.
@@ -62,8 +63,9 @@ Post.METHOD_LABEL = METHOD_LABEL
 
 -- Every method's price per unit (raw copper, nil when it has no number)
 -- for an item at the current auction house. listings: optional live
--- { unitPrice, units, yours } listings; without them the latest scan's
--- numbers are used. Returns the prices and Prices:GetPrice's entry.
+-- { unitPrice, units, yours, yourUnits } listings, authoritative even when
+-- empty (nobody's selling: no median, match or undercut); without them the
+-- latest scan's numbers are used. Returns the prices and Prices:GetPrice's entry.
 function Post:PriceOptions(itemID, listings)
     local out = {}
     local prices = MF.Prices
@@ -71,15 +73,13 @@ function Post:PriceOptions(itemID, listings)
     local market = p and p.market
     out.market = market
     local cheapest
-    if listings and #listings > 0 then
-        local others = {}
-        for _, l in ipairs(listings) do
-            if not l[3] then others[#others + 1] = l end
-        end
+    if listings then
         out.median = MF.Prices.Median(listings)
         out.trimmed = MF.Prices.TrimmedMean(listings)
-        for _, l in ipairs(others) do
-            if not cheapest or l[1] < cheapest then cheapest = l[1] end
+        -- Other sellers' cheapest: a price counts if anyone else has units there.
+        for _, l in ipairs(listings) do
+            local own = l[4] or (l[3] and l[2] or 0)
+            if (l[2] or 0) - own > 0 and (not cheapest or l[1] < cheapest) then cheapest = l[1] end
         end
     elseif p then
         out.median, out.trimmed, cheapest = p.median, p.trimmed, p.minBuyout
@@ -108,6 +108,11 @@ end
 -- the method used.
 function Post:Suggest(itemID, listings)
     if not itemID then return nil end
+    -- Live listings Razzle's Sell tab has for this item, so the price filled
+    -- in agrees with the one the tab shows.
+    if listings == nil and MF.Broker and MF.Broker.LiveListings then
+        listings = MF.Broker:LiveListings(itemID)
+    end
     local options, p = self:PriceOptions(itemID, listings)
     local method = self.db.global.method or "market"
     if not METHOD_LABEL[method] then method = "market" end

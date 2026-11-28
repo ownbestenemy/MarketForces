@@ -49,7 +49,9 @@ end
 
 -- Listings ---------------------------------------------------------------------
 
--- Merges { price, units, yours } listings at the same price, cheapest first.
+-- Merges { price, units, yours, yourUnits } listings at the same price,
+-- cheapest first. yourUnits (default: all of them when yours) is kept per
+-- price, so a price you share with other sellers still counts theirs.
 function Broker.MergeListings(listings)
     local byPrice, out = {}, {}
     for _, l in ipairs(listings) do
@@ -57,12 +59,14 @@ function Broker.MergeListings(listings)
         if price and price > 0 then
             local row = byPrice[price]
             if not row then
-                row = { price, 0, false }
+                row = { price, 0, false, 0 }
                 byPrice[price] = row
                 out[#out + 1] = row
             end
+            local own = math.min(l[4] or (l[3] == true and units or 0), units)
             row[2] = row[2] + units
-            row[3] = row[3] or l[3] == true
+            row[3] = row[3] or l[3] == true or own > 0
+            row[4] = row[4] + own
         end
     end
     table.sort(out, function(a, b) return a[1] < b[1] end)
@@ -77,8 +81,8 @@ function Broker.ReadCommodityResults(itemID)
     for i = 1, AH.GetNumCommoditySearchResults(itemID) or 0 do
         local info = AH.GetCommoditySearchResultInfo(itemID, i)
         if info then
-            local yours = info.containsOwnerItem or (info.numOwnerItems or 0) > 0
-            listings[#listings + 1] = { info.unitPrice, info.quantity, yours }
+            local own = info.numOwnerItems or (info.containsOwnerItem and info.quantity) or 0
+            listings[#listings + 1] = { info.unitPrice, info.quantity, own > 0 or info.containsOwnerItem == true, own }
         end
     end
     return Broker.MergeListings(listings)
@@ -163,7 +167,7 @@ function Broker:SellPricing(itemID)
     if not (post and post:IsEnabled()) then
         return { rows = {}, stackSize = 1, breakdown = {}, off = "Selling's off. Turn it on with /mf enable post." }
     end
-    local live = self.sellLive and self.sellLive.itemID == itemID and self.sellLive.listings or nil
+    local live = self:LiveListings(itemID)
     local options, p = post:PriceOptions(itemID, live)
     local price, _, method = post:Suggest(itemID, live)
     local chosen = post.METHOD_LABEL[post.db.global.method] and post.db.global.method or "market"
@@ -336,8 +340,7 @@ function Broker:PickPriceMethod(key)
     local line = "Pricing by " .. label:lower() .. " from now on."
     local itemID = self.sellItem
     if itemID then
-        local live = self.sellLive and self.sellLive.itemID == itemID and self.sellLive.listings or nil
-        local price, _, used = post:Suggest(itemID, live)
+        local price, _, used = post:Suggest(itemID, self:LiveListings(itemID))
         if price and used ~= key then
             line = line .. " " .. label .. " has no number for " .. Broker.ItemName(itemID)
                 .. " yet, so it's market value for now."
@@ -613,6 +616,13 @@ function Broker:FillPricing(itemID)
 end
 
 -- Events -----------------------------------------------------------------------
+
+-- The live listings the Sell tab holds for an item (an empty table when
+-- the search found none), or nil when it has none for that item.
+function Broker:LiveListings(itemID)
+    local live = self.sellLive
+    return live and itemID and live.itemID == itemID and live.listings or nil
+end
 
 -- Search results Blizzard's sell frame (or the player) asked for. Only the
 -- item the Sell tab is looking at is read; nothing here sends a search.

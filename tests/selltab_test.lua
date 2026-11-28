@@ -23,6 +23,10 @@ check(Broker.StackSplit(24, 20) == "24 = 1 stack of 20 + 4" and Broker.StackSpli
 check(Broker.StackSplit(4, 20) == nil and Broker.StackSplit(3, 1) == nil, "no split under a stack or for one-offs")
 local opts = MF.Post:PriceOptions(nil, { { 1050, 5 }, { 1200, 5 }, { 900, 2, true } })
 check(opts.match == 1000 and opts.undercut == 1000 and opts.median == 1050, "options from listings, yours skipped")
+opts = MF.Post:PriceOptions(nil, Broker.MergeListings({ { 1000, 1, true }, { 1000, 10, false }, { 2000, 1, false } }))
+check(opts.match == 1000, "a price you share with others still counts theirs")
+opts = MF.Post:PriceOptions(nil, Broker.MergeListings({ { 1000, 3, true, 3 }, { 2000, 1 } }))
+check(opts.match == 2000, "a price only you hold is skipped")
 check(Broker.VsMarket(100, 100) == "0%" and Broker.VsMarket(100, nil) == "", "at market; no market")
 check(Broker.VsMarket(88, 100):find("^|cff33ff33") and Broker.VsMarket(108, 100):find("^|cffff9933"),
     "under in green, over in orange")
@@ -130,6 +134,11 @@ check(frame.sellListPcts[3].text == "", "empty rows have no percent")
 rowIs(2, "Median", "1s", "20s", "median of the live listings")
 rowIs(5, "Match cheapest", "1s", "20s", "match ignores your own listing")
 
+-- Live results are authoritative even when empty: no competitors, no match.
+local empty = MF.Post:PriceOptions(2589, {})
+check(empty.match == nil and empty.undercut == nil and empty.median == nil and empty.market,
+    "empty live results don't fall back to the scan")
+
 -- Pick a pricing method: remembered, and put in the sell slot holding linen.
 sell.PriceInput.amount = 0
 frame.sellMethodRows[2]:Click()
@@ -140,6 +149,11 @@ check(H.plain(frame.speech.text) == "Pricing by median from now on. Set 1s each.
 rowIs(1, "Market value", "2s", "40s", "market no longer marked")
 rowIs(2, "> Median", "1s", "20s", "median marked")
 check(H.plain(frame.sellBreakdown[1].text) == "Your 20 at 1s: 20s, 19s after the cut", "breakdown follows the method")
+-- Razzle's own fill-in (the item put in the slot again) uses the live median too.
+sell.PriceInput.amount = 0
+sell:SetItem({ itemID = 2589, bag = 0, slot = 1 })
+H.runTimers()
+check(sell.PriceInput.amount == 100, "automatic fill agrees with the live price shown")
 frame.sellMethodRows[1]:Click()
 check(MF.Post.db.global.method == "market" and sell.PriceInput.amount == 200, "back to market value")
 H.slash("pricing trimmed")
