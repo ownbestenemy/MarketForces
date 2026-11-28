@@ -212,9 +212,10 @@ function Post:AUCTION_HOUSE_SHOW()
 end
 
 -- How many to put up: everything you hold, unless that's more than the
--- market holds right now (other sellers' listed units, at least one full
--- stack), so a pile doesn't sit unsold. Returns the quantity and whether
--- it was capped.
+-- market holds right now (other sellers' listed units, and never fewer than
+-- one bag slot holds, e.g. 20 cloth), so a pile doesn't sit unsold. The
+-- auction house itself has no stacks: a commodity goes up as one quantity
+-- at one price per unit. Returns the quantity and whether it was capped.
 function Post.SuggestQuantity(owned, listed, stackSize)
     if not owned or owned < 1 then return 1, false end
     local cap = math.max(listed or 0, stackSize or 1, 1)

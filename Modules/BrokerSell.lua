@@ -14,11 +14,13 @@
 --                     Blizzard's price box.
 --   Pricing & results every pricing method's price (market value, median,
 --                     trimmed mean, undercut, match cheapest, your sales;
---                     see Post.lua) per unit and per stack, the one in use
---                     marked. Click one to price by it from now on (and, if
---                     the sell slot holds the item, put its price in).
---                     Below: your copies in stacks and what they'd bring
---                     before and after the 5% cut, then what your auction
+--                     see Post.lua) per unit and for all your copies, the
+--                     one in use marked. Click one to price by it from now
+--                     on (and, if the sell slot holds the item, put its
+--                     price in). WoW: Forever's auction house has no stacks:
+--                     stackable goods are posted as a quantity at one price
+--                     per unit. Below: what your copies would bring before
+--                     and after the 5% cut, then what your auction
 --                     mail says about this item (History.lua): sold,
 --                     sell-through, expired, bought, and the latest records.
 --
@@ -146,52 +148,46 @@ local function stackSizeOf(itemID)
     return (size and size > 1) and size or 1
 end
 
--- "24 = 1 stack of 20 + 4", "40 = 2 stacks of 20", or nil for one-offs.
-function Broker.StackSplit(count, stackSize)
-    if not (count and stackSize and stackSize > 1 and count > 0) then return nil end
-    local stacks, rest = math.floor(count / stackSize), count % stackSize
-    if stacks == 0 then return nil end
-    local text = string.format("%d = %d %s of %d", count, stacks, stacks == 1 and "stack" or "stacks", stackSize)
-    if rest > 0 then text = text .. " + " .. rest end
-    return text
-end
-
--- The pricing block for an item: { rows = { { key, label, each, stack,
--- active (the one you chose) } }, stackSize, chosen, method (in use: the
--- chosen one, or market value while it has no number), price (per unit), breakdown =
--- lines about your copies, read = Razzle's read of the market, off =
--- message when selling is off }. Prices per unit are to the copper;
--- per stack is that times the stack size.
+-- The pricing block for an item: { rows = { { key, label, each, total,
+-- active (the one you chose) } }, count (your copies), chosen, method (in
+-- use: the chosen one, or market value while it has no number), price (per
+-- unit), breakdown = lines about your copies, read = Razzle's read of the
+-- market, off = message when selling is off }. Prices per unit are to the
+-- copper; total is that times your copies (only when you hold more than one).
 function Broker:SellPricing(itemID)
     local post = MF.Post
     if not (post and post:IsEnabled()) then
-        return { rows = {}, stackSize = 1, breakdown = {}, off = "Selling's off. Turn it on with /mf enable post." }
+        return { rows = {}, count = 0, breakdown = {}, off = "Selling's off. Turn it on with /mf enable post." }
     end
     local live = self:LiveListings(itemID)
     local options, p = post:PriceOptions(itemID, live)
     local price, _, method = post:Suggest(itemID, live)
     local chosen = post.METHOD_LABEL[post.db.global.method] and post.db.global.method or "market"
-    local stackSize = stackSizeOf(itemID)
-    local out = { rows = {}, stackSize = stackSize, method = method, chosen = chosen, price = price, breakdown = {} }
+    local count = MF.Flip and MF.Flip.CountInBags(itemID) or 0
+    local out = { rows = {}, count = count, method = method, chosen = chosen, price = price, breakdown = {} }
     for _, m in ipairs(post.METHODS) do
         local each = options[m.key] and post.RoundPrice(options[m.key])
         local label = m.label
         if m.key == "undercut" and options.undercutFloored then label = label .. " (floor)" end
         out.rows[#out.rows + 1] = {
             key = m.key, label = label, each = each,
-            stack = each and stackSize > 1 and each * stackSize or nil,
+            total = each and count > 1 and each * count or nil,
             active = m.key == chosen,
         }
     end
     if price and method ~= chosen then
         out.breakdown[1] = GREY .. "Market value until " .. post.METHOD_LABEL[chosen]:lower() .. " has a number|r"
     end
-    local count = MF.Flip and MF.Flip.CountInBags(itemID) or 0
     if price and count > 0 then
         local total = price * count
         out.breakdown[#out.breakdown + 1] = string.format("Your %d at %s: %s, %s after the cut", count,
             Util.FormatMoney(price), Util.FormatMoney(total), Util.FormatMoney(math.floor(total * (1 - self.AH_CUT))))
-        out.breakdown[#out.breakdown + 1] = Broker.StackSplit(count, stackSize)
+        -- The quantity a shift-click or bag click would put up (Post.lua).
+        local quantity, capped = post.SuggestQuantity(count, p and p.quantity, stackSizeOf(itemID))
+        if capped then
+            out.breakdown[#out.breakdown + 1] = string.format(
+                "I'd put up %d of your %d at a time, so a pile doesn't sit unsold", quantity, count)
+        end
     elseif not price then
         out.breakdown[1] = GREY .. "No price to go on yet. A scan or two will teach me.|r"
     end
@@ -439,20 +435,20 @@ function Broker:BuildSellPage(f, page)
     -- Pricing & results.
     local W3 = self.SELL_PRICING_WIDTH
     local results = column(page, W + W2 + 24, W3, "Pricing")
-    -- Column heads: method, per unit, per stack.
+    -- Column heads: method, per unit, for all your copies.
     local function cells(parent)
         local each = Broker.NewText(parent, "GameFontHighlightSmall", 70)
         each:SetPoint("RIGHT", parent, "RIGHT", -76, 0)
         each:SetJustifyH("RIGHT")
-        local stack = Broker.NewText(parent, "GameFontHighlightSmall", 72)
-        stack:SetPoint("RIGHT", parent, "RIGHT", 0, 0)
-        stack:SetJustifyH("RIGHT")
-        return each, stack
+        local total = Broker.NewText(parent, "GameFontHighlightSmall", 72)
+        total:SetPoint("RIGHT", parent, "RIGHT", 0, 0)
+        total:SetJustifyH("RIGHT")
+        return each, total
     end
     local heads = CreateFrame("Frame", nil, results)
     heads:SetSize(W3, 14)
     heads:SetPoint("TOPLEFT", results.header, "BOTTOMLEFT", 0, -4)
-    f.sellHeadEach, f.sellHeadStack = cells(heads)
+    f.sellHeadEach, f.sellHeadTotal = cells(heads)
     f.sellHeadEach:SetText("per unit")
     f.sellMethodRows = {}
     previous = heads
@@ -472,7 +468,7 @@ function Broker:BuildSellPage(f, page)
         end)
         line:SetWidth(W3 - 150)
         row.label = line
-        row.each, row.stack = cells(row)
+        row.each, row.total = cells(row)
         f.sellMethodRows[i] = row
         previous = row
     end
@@ -591,8 +587,8 @@ end
 -- Fills the pricing rows and breakdown (cleared for nil).
 function Broker:FillPricing(itemID)
     local f = self.frame
-    local pricing = itemID and self:SellPricing(itemID) or { rows = {}, stackSize = 1, breakdown = {} }
-    f.sellHeadStack:SetText(pricing.stackSize > 1 and ("per " .. pricing.stackSize) or "")
+    local pricing = itemID and self:SellPricing(itemID) or { rows = {}, count = 0, breakdown = {} }
+    f.sellHeadTotal:SetText(pricing.count > 1 and ("your " .. pricing.count) or "")
     f.sellHeadEach:SetText(itemID and "per unit" or "")
     for i, row in ipairs(f.sellMethodRows) do
         local r = pricing.rows[i]
@@ -601,11 +597,11 @@ function Broker:FillPricing(itemID)
             local label = r.active and (GOLD .. "> " .. r.label .. "|r") or r.label
             row.label:SetText(label)
             row.each:SetText(r.each and Util.FormatMoney(r.each) or (GREY .. "-|r"))
-            row.stack:SetText(r.stack and Util.FormatMoney(r.stack) or "")
+            row.total:SetText(r.total and Util.FormatMoney(r.total) or "")
         else
             row.label:SetText(i == 1 and pricing.off or "")
             row.each:SetText("")
-            row.stack:SetText("")
+            row.total:SetText("")
         end
     end
     local lines = {}

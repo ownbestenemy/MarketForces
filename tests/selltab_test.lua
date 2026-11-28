@@ -18,9 +18,6 @@ check(H.plain(Broker.ListingLine({ 150, 10, true })) == "10 at 1s 50c (yours)", 
 check(H.plain(Broker.ListingLine({ 200, 8, false })) == "8 at 2s", "listing line")
 check(H.plain(Broker.VsMarket(88, 100)) == "-12%" and H.plain(Broker.VsMarket(108, 100)) == "+8%",
     "percent under and over market")
-check(Broker.StackSplit(24, 20) == "24 = 1 stack of 20 + 4" and Broker.StackSplit(40, 20) == "40 = 2 stacks of 20",
-    "stack split")
-check(Broker.StackSplit(4, 20) == nil and Broker.StackSplit(3, 1) == nil, "no split under a stack or for one-offs")
 local opts = MF.Post:PriceOptions(nil, { { 1050, 5 }, { 1200, 5 }, { 900, 2, true } })
 check(opts.match == 1050 and opts.undercut == 1049 and opts.median == 1050, "options from listings, yours skipped")
 opts = MF.Post:PriceOptions(nil, { { 495, 3 } })
@@ -90,16 +87,16 @@ check(H.plain(frame.sellListLines[1].text) == "5 at 1s 50c", "cheapest scan list
 local linenMarket = MF.Prices:GetPrice(2589).market
 check(frame.sellListPcts[1].text == Broker.VsMarket(150, linenMarket) and frame.sellListPcts[1].text ~= "",
     "vs market shown beside the scan listing")
--- Pricing: every method per unit and per stack of 20, market in use.
+-- Pricing: every method per unit and for your 20 copies, market in use.
 local function row(i)
     local r = frame.sellMethodRows[i]
-    return H.plain(r.label.text), H.plain(r.each.text), H.plain(r.stack.text)
+    return H.plain(r.label.text), H.plain(r.each.text), H.plain(r.total.text)
 end
-local function rowIs(i, label, each, stack, what)
-    local l, e, st = row(i)
-    check(l == label and e == each and st == stack, what .. " (got " .. l .. " | " .. e .. " | " .. st .. ")")
+local function rowIs(i, label, each, total, what)
+    local l, e, t = row(i)
+    check(l == label and e == each and t == total, what .. " (got " .. l .. " | " .. e .. " | " .. t .. ")")
 end
-check(frame.sellHeadEach.text == "per unit" and frame.sellHeadStack.text == "per 20", "column heads")
+check(frame.sellHeadEach.text == "per unit" and frame.sellHeadTotal.text == "your 20", "column heads")
 rowIs(1, "> Market value", "1s 77c", "35s 40c", "market value in use, copper kept")
 rowIs(2, "Median", "3s", "60s", "median of the scan")
 rowIs(3, "Trimmed mean", "2s 55c", "51s", "trimmed mean of the scan")
@@ -108,7 +105,8 @@ rowIs(5, "Match cheapest", "1s 50c", "30s", "match to the copper")
 rowIs(6, "Your sales", "2s", "40s", "your sales' average")
 check(H.plain(frame.sellBreakdown[1].text) == "Your 20 at 1s 77c: 35s 40c, 33s 63c after the cut",
     "what your copies bring")
-check(H.plain(frame.sellBreakdown[2].text) == "20 = 1 stack of 20", "stacks")
+check(frame.sellBreakdown[2].text == "" or H.plain(frame.sellBreakdown[2].text):find("^Market's"),
+    "no stack talk: the auction house has none")
 check(H.plain(frame.sellResultLines[1].text) == "Sold 15 in 2 listings, ~2s each", "sales summed for this market only")
 check(H.plain(frame.sellResultLines[2].text) == "Sell-through: 2 of 3 (67%)", "sell-through")
 check(H.plain(frame.sellResultLines[3].text) == "Expired 1, cancelled 0", "expired count")
@@ -189,6 +187,15 @@ check(sell.PriceInput.amount == 10000, "market value used instead")
 rowIs(6, "> Your sales", "-", "", "your choice stays marked")
 check(H.plain(frame.sellBreakdown[1].text) == "Market value until your sales has a number", "breakdown says why")
 frame.sellMethodRows[1]:Click()
+check(frame.sellHeadTotal.text == "your 4", "total for the 4 ore you hold")
+rowIs(1, "> Market value", "1g", "4g", "ore per unit and for your 4")
+-- More ore than the market holds: the tab says how many Razzle would put up.
+H.bags[0][4] = { itemID = 2770, stackCount = 36 }
+Broker:RefreshSell()
+check(H.plain(frame.sellBreakdown[2].text) == "I'd put up 20 of your 40 at a time, so a pile doesn't sit unsold",
+    "the quantity Razzle would put up")
+H.bags[0][4] = nil
+Broker:RefreshSell()
 sell.PriceInput.amount = 7
 frame.sellListRows[1]:Click()
 check(sell.PriceInput.amount == 10000, "ore's own listing matched into ore's slot")
@@ -222,6 +229,8 @@ H.fire("ITEM_SEARCH_RESULTS_UPDATED", { itemID = 9003 })
 check(H.plain(frame.sellListLines[1].text) == "1 at 5g" and frame.sellListLines[2].text == "",
     "gear listings read; bid-only left out")
 check(frame.sellSource.text == "Live from the auction house", "gear live")
+check(frame.sellHeadTotal.text == "" and H.plain(frame.sellMethodRows[1].total.text) == "",
+    "one sword: no total column")
 
 -- Broker turned off and on: live listings can't survive it.
 MF:DisableModule("Broker")

@@ -76,7 +76,7 @@ goes in the sell slot by hand is followed too. The tab never sends a
 search, never posts: the Post click is the player's.
 
 The Sell tab's third column, **Pricing**, lists every pricing method's price
-per unit and per stack (the item's stack size), with the one in use marked:
+per unit and for all your copies, with the one in use marked:
 market value, median, trimmed mean (cheapest and dearest 10% of units left
 out), undercut (1 copper below the cheapest other listing,
 never under 80% of market value), match cheapest (to the copper) and your sales (your average sale price from History). Median,
@@ -85,9 +85,12 @@ them, otherwise the latest scan's (Prices keeps each scan's median and
 trimmed mean). Click a method to price by it from now on (also
 `/mf pricing <method>`); if the sell slot holds the item, its price box
 gets the new price. A method with no number yet falls back to market
-value, and the tab says so. Below the methods: your copies in stacks
-(`24 = 1 stack of 20 + 4`) and what they'd bring before and after the 5%
-cut. Then your results from History.
+value, and the tab says so. Below the methods: what your copies would
+bring before and after the 5% cut, and how many Razzle would put up at a
+time when that's fewer than you hold. WoW: Forever has the retail-style
+auction house, so there are no stacks: a commodity (cloth, ore, potions) is
+posted as one quantity at one price per unit, and buyers take the cheapest
+units first. Then your results from History.
 
 Post hooks Blizzard's sell frames (`ItemSellFrame`, `CommoditiesSellFrame`).
 When an item goes in, it sets the price box to the chosen pricing method's
@@ -99,7 +102,8 @@ Shift-clicking a bag item while the auction house is open puts it up for
 sale: Post finds it in the bags, calls Blizzard's `AuctionHouseFrame:SetPostItem`
 (the same as right-clicking it on the Sell tab), and on the next frame sets
 the quantity and duration. The quantity is everything you hold, capped at
-what other sellers list right now (at least one stack); the duration is
+what other sellers list right now (but never fewer than one bag slot
+holds, e.g. 20 cloth); the duration is
 Blizzard's middle choice unless changed with `/mf duration <hours>`, also
 saved to Blizzard's `auctionHouseDurationDropdown` default. Durations are
 named from the client's own strings (`AUCTION_DURATION_ONE` etc.; Forever's
