@@ -2,6 +2,8 @@
 local H = dofile("tests/harness.lua")
 local check = H.check
 
+function UnitName() return "Mark" end
+
 local MF = H.startAddon()
 local Post = MF:GetModule("Post")
 check(Post and Post:IsEnabled(), "Post module loads and is on")
@@ -11,6 +13,9 @@ H.auctions = {
     { itemID = 2589, count = 1, buyout = 40 },
     { itemID = 2589, count = 9, buyout = 900 },
     { itemID = 2770, count = 4, buyout = 50000 }, -- ore 1g 25s each
+    { itemID = 2771, count = 2, buyout = 1000, owner = "Mark" }, -- your tin at 5s, the cheapest
+    { itemID = 2771, count = 2, buyout = 1400 },                 -- someone else's at 7s
+    { itemID = 2772, count = 3, buyout = 900, owner = "Mark" },  -- iron only you sell
 }
 H.openAuctionHouse()
 H.slash("scan")
@@ -21,6 +26,16 @@ check(Post:Suggest(2770) == 12500, "suggestion is market value")
 check(Post:Suggest(2589) == 80, "prices keep their copper")
 check(Post.RoundPrice(0.2) == 1 and Post.RoundPrice(495) == 495, "at least 1c; copper kept")
 check(Post:Suggest(424242) == nil, "no suggestion without history")
+
+-- The scan's own listings aren't competition: match and undercut go by
+-- other sellers only, and have no number when nobody else sells.
+local tin = Post:PriceOptions(2771)
+check(tin.match == 700 and tin.undercut == 699, "your cheaper auction isn't undercut (got "
+    .. tostring(tin.match) .. ", " .. tostring(tin.undercut) .. ")")
+local iron = Post:PriceOptions(2772)
+check(iron.match == nil and iron.undercut == nil and iron.market, "only you sell it: no match or undercut")
+MF.Prices:ItemsFor()[2771].o = nil
+check(Post:PriceOptions(2771).match == nil, "a scan from before owner tracking isn't trusted")
 
 -- Putting an item in the sell slot fills in the price on the next frame.
 H.blizzardDefaultPrice = 99999

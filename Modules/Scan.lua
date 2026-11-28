@@ -13,6 +13,8 @@
 --     snapshot.auctions  number of auctions read
 --     snapshot.items     [itemID] = {
 --         minBuyout = lowest buyout per unit (nil if every listing is bid-only),
+--         otherMin  = lowest buyout per unit among other sellers' listings
+--                     (nil if only you, or nobody, list one with a buyout),
 --         quantity  = units listed,
 --         auctions  = number of listings,
 --         listings  = { {unitBuyout, count}, ... } for buyout listings,
@@ -159,12 +161,17 @@ function Scan:REPLICATE_ITEM_LIST_UPDATE()
     local snapshot = { key = MF.db.ahKey, auctions = 0, items = {} }
     local id = self.scanID
     local index = 0 -- replicate indices start at 0
+    -- Your own listings don't count as competition (Post's undercut/match).
+    local me = UnitName and UnitName("player")
+    local function mine(owner, ownerFull)
+        return me ~= nil and (owner == me or ownerFull == me)
+    end
 
     local function step()
         if self.state ~= "reading" or self.scanID ~= id then return end
         local last = math.min(index + self.db.global.perFrame, total) - 1
         for i = index, last do
-            local _, _, count, _, _, _, _, _, _, buyout, _, _, _, _, _, _, itemID =
+            local _, _, count, _, _, _, _, _, _, buyout, _, _, _, owner, ownerFull, _, itemID =
                 C_AuctionHouse.GetReplicateItemInfo(i)
             if itemID then
                 count = (count and count > 0) and count or 1
@@ -180,6 +187,9 @@ function Scan:REPLICATE_ITEM_LIST_UPDATE()
                     item.listings[#item.listings + 1] = { unit, count }
                     if not item.minBuyout or unit < item.minBuyout then
                         item.minBuyout = unit
+                    end
+                    if not mine(owner, ownerFull) and (not item.otherMin or unit < item.otherMin) then
+                        item.otherMin = unit
                     end
                 end
                 snapshot.auctions = snapshot.auctions + 1

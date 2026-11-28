@@ -81,7 +81,9 @@ function Post:PriceOptions(itemID, listings)
             if (l[2] or 0) - own > 0 and (not cheapest or l[1] < cheapest) then cheapest = l[1] end
         end
     elseif p then
-        out.median, out.trimmed, cheapest = p.median, p.trimmed, p.minBuyout
+        -- The scan's cheapest from other sellers, so your own auction is
+        -- never undercut or matched as if it were a competitor's.
+        out.median, out.trimmed, cheapest = p.median, p.trimmed, p.cheapestOther
     end
     if cheapest then
         -- Match is the cheapest to the copper; undercut is 1c under it,

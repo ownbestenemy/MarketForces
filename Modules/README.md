@@ -82,7 +82,8 @@ out), undercut (1 copper below the cheapest other listing,
 never under 80% of market value), match cheapest (to the copper) and your sales (your average sale price from History). Median,
 trimmed mean, undercut and match use the live listings when the tab has
 them, otherwise the latest scan's (Prices keeps each scan's median and
-trimmed mean). Click a method to price by it from now on (also
+trimmed mean, and the cheapest listing from other sellers: Scan knows your
+own auctions by seller name, so you never undercut yourself). Click a method to price by it from now on (also
 `/mf pricing <method>`); if the sell slot holds the item, its price box
 gets the new price. A method with no number yet falls back to market
 value, and the tab says so. Below the methods: what your copies would

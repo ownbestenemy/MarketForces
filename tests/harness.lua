@@ -206,7 +206,7 @@ C_AuctionHouse = {
         local a = H.auctions[index + 1]
         if not a then return nil end
         return "Item " .. a.itemID, 0, a.count, 1, true, 1, 0, a.bid or 0, 0, a.buyout or 0,
-            0, false, nil, "Seller", "Seller-Realm", 0, a.itemID, true
+            0, false, nil, a.owner or "Seller", a.owner or "Seller-Realm", 0, a.itemID, true
     end,
 }
 

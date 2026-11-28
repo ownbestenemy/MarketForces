@@ -256,6 +256,7 @@ function Prices:RecordSnapshot(snapshot)
         entry.q = item.quantity
         entry.t = snapshot.time
         entry.l = item.minBuyout
+        entry.o = item.otherMin or false
         entry.md = Prices.Median(item.listings)
         entry.tm = Prices.TrimmedMean(item.listings)
         local value = Prices.ScanValue(item.listings, share)
@@ -278,6 +279,7 @@ function Prices:RecordSnapshot(snapshot)
         if not snapshot.items[itemID] and entry.t and entry.t < snapshot.time then
             entry.q = 0
             entry.l = nil
+            entry.o = false
             entry.b, entry.bm = nil, nil
             entry.md, entry.tm = nil, nil
         end
@@ -326,6 +328,8 @@ end
 -- Prices for an item at an auction house (current house if key is nil).
 -- Returns nil if the item has never been seen, otherwise a table:
 --   market, minBuyout, quantity, lastSeen, days (days of history),
+--   cheapestOther = the latest scan's cheapest buyout per unit from other
+--   sellers (nil when there's none, or the scan predates owner tracking),
 --   trend ("rising"/"falling"/"steady"/nil) and trendChange (percent),
 --   confidence (0-1, see Prices.Confidence),
 --   median, trimmed = the latest scan's median and trimmed mean unit price,
@@ -358,6 +362,7 @@ function Prices:GetPrice(itemID, key)
         ladderMore = entry.bm == true,
         market = blend(entry.d, dayNumber(time()), self.db.global.halfLifeDays, self.db.global.lowWeight),
         minBuyout = entry.l,
+        cheapestOther = entry.o or nil,
         median = entry.md,
         trimmed = entry.tm,
         quantity = entry.q or 0,
